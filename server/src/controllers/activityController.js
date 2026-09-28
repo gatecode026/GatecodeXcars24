@@ -1,0 +1,134 @@
+import { isDatabaseReady } from "../config/db.js";
+import { ActivityLog } from "../models/ActivityLog.js";
+
+/**
+ * Helper to record activity log safely without blocking main transaction
+ */
+export const recordActivity = async ({
+  performedBy,
+  performedByName,
+  performedByRole,
+  actionType,
+  targetCustomerId,
+  appointmentId,
+  customerName,
+  carNumber,
+  affectedEmployeeId,
+  affectedEmployeeName,
+  title,
+  details,
+  employeeMessage,
+  adminMessage,
+  metadata
+}) => {
+  try {
+    if (!isDatabaseReady()) return null;
+    return await ActivityLog.create({
+      performedBy,
+      performedByName: performedByName || "User",
+      performedByRole: performedByRole || "employee",
+      actionType,
+      targetCustomerId: targetCustomerId || null,
+      appointmentId: appointmentId || "",
+      customerName: customerName || "",
+      carNumber: carNumber || "",
+      affectedEmployeeId: affectedEmployeeId || null,
+      affectedEmployeeName: affectedEmployeeName || "",
+      title,
+      details,
+      employeeMessage: employeeMessage || details,
+      adminMessage: adminMessage || details,
+      metadata: metadata || {}
+    });
+  } catch (err) {
+    console.error("Failed to record activity log:", err.message);
+    return null;
+  }
+};
+
+/**
+ * Controller to fetch live activities tailored to user role
+ */
+export const getActivities = async (req, res, next) => {
+  try {
+    if (!isDatabaseReady()) {
+      return res.status(503).json({ message: "Database unavailable." });
+    }
+
+    const userId = req.user._id || req.user.id;
+    const userRole = req.user.role || "employee";
+    const limit = Math.min(Number(req.query.limit) || 40, 100);
+
+    const query = {};
+
+    // Role-based visibility
+    if (userRole === "employee") {
+      // Employee sees activities they performed, OR where they are the affected employee (e.g. TL edited their lead)
+      query.$or = [
+        { performedBy: userId },
+        { affectedEmployeeId: userId }
+      ];
+    }
+    // Admin / TL sees all activities
+
+    if (req.query.type && req.query.type !== "all") {
+      query.actionType = req.query.type;
+    }
+
+    const activities = await ActivityLog.find(query)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    // Map customized display text based on who is viewing
+    const formatted = activities.map((act) => {
+      const isActor = String(act.performedBy) === String(userId);
+      const isTarget = String(act.affectedEmployeeId) === String(userId);
+      const isTLOrAdminActor = act.performedByRole === "admin" || act.performedByRole === "tl";
+
+      let displayMessage = act.details;
+      let badgeType = "default";
+
+      if (userRole === "employee") {
+        if (isTarget && !isActor) {
+          // TL edited employee's appointment
+          displayMessage = act.employeeMessage || `${act.performedByName} (TL/Admin) modified your lead/appointment [${act.appointmentId || "N/A"}]`;
+          badgeType = "tl-action";
+        } else if (isActor) {
+          displayMessage = `You ${act.details.replace(new RegExp(`^${act.performedByName}\\s+`, "i"), "")}`;
+          badgeType = "self";
+        }
+      } else {
+        // Admin / TL view
+        displayMessage = act.adminMessage || act.details;
+        badgeType = isTLOrAdminActor ? "tl-action" : "emp-action";
+      }
+
+      return {
+        _id: act._id,
+        actionType: act.actionType,
+        performedBy: act.performedBy,
+        performedByName: act.performedByName,
+        performedByRole: act.performedByRole,
+        appointmentId: act.appointmentId,
+        customerName: act.customerName,
+        carNumber: act.carNumber,
+        affectedEmployeeName: act.affectedEmployeeName,
+        title: act.title,
+        message: displayMessage,
+        details: act.details,
+        badgeType,
+        isActor,
+        isTarget,
+        createdAt: act.createdAt
+      };
+    });
+
+    return res.status(200).json({
+      data: formatted,
+      total: formatted.length
+    });
+  } catch (error) {
+    return next(error);
+  }
+};

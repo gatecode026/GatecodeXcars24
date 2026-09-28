@@ -1,0 +1,16 @@
+{
+  "name": "gatecodexcars24",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently -k \"npm --workspace gatecodexcars24-server run dev\" \"npm --workspace gatecodexcars24-client run dev\"",
+    "build": "npm --workspace gatecodexcars24-client run build",
+    "preview": "npm --workspace gatecodexcars24-client run preview"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
