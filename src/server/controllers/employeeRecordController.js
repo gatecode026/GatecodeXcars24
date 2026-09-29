@@ -1,13 +1,13 @@
-import { isDatabaseReady, ensureDB } from "../config/db.js";
+import { ensureDB } from "../config/db.js";
 import { EmployeeRecord } from "../models/EmployeeRecord.js";
 import { User } from "../models/User.js";
 
 export const getEmployeeRecords = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-      if (!_dbReady) {
-        return res.status(503).json({ message: "Database unavailable." });
-      }
+    const dbReady = await ensureDB();
+    if (!dbReady) {
+      return res.status(503).json({ message: "Database unavailable." });
+    }
 
     const { date, employeeId, type, limit } = req.query;
     const filter = {};
@@ -44,10 +44,10 @@ export const getEmployeeRecords = async (req, res, next) => {
 
 export const createEmployeeRecord = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-      if (!_dbReady) {
-        return res.status(503).json({ message: "Database unavailable." });
-      }
+    const dbReady = await ensureDB();
+    if (!dbReady) {
+      return res.status(503).json({ message: "Database unavailable." });
+    }
 
     const { employeeId, date, type, description, referenceId } = req.body;
 
@@ -77,10 +77,10 @@ export const createEmployeeRecord = async (req, res, next) => {
 
 export const deleteEmployeeRecord = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-      if (!_dbReady) {
-        return res.status(503).json({ message: "Database unavailable." });
-      }
+    const dbReady = await ensureDB();
+    if (!dbReady) {
+      return res.status(503).json({ message: "Database unavailable." });
+    }
 
     const record = await EmployeeRecord.findByIdAndDelete(req.params.id);
     if (!record) {

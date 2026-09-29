@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { isDatabaseReady, ensureDB, connectDB } from "../config/db.js";
+import { ensureDB } from "../config/db.js";
 import { User } from "../models/User.js";
 
 const getFixedAdminUser = () => ({
@@ -39,13 +39,9 @@ const signToken = (user) =>
 
 export const registerUser = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      try { await connectDB(); } catch (_) {}
+    if (!await ensureDB()) {
+      return res.status(503).json({ message: "Database unavailable. Cannot register user." });
     }
-    const _dbReady = await ensureDB();
-      if (!_dbReady) {
-        return res.status(503).json({ message: "Database unavailable. Cannot register user." });
-      }
 
     const { name, email, password, phoneNumber, username, role } = req.body;
     const assignedRole = ["admin", "employee"].includes(role) ? role : "user";
@@ -85,7 +81,7 @@ export const registerUser = async (req, res, next) => {
 
 export const getUsers = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
+    if (!await ensureDB()) {
       return res.status(200).json({ data: [] });
     }
 
@@ -113,10 +109,9 @@ export const getUsers = async (req, res, next) => {
 
 export const getUserById = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-      if (!_dbReady) {
-        return res.status(503).json({ message: "Database unavailable." });
-      }
+    if (!await ensureDB()) {
+      return res.status(503).json({ message: "Database unavailable." });
+    }
     const user = await User.findById(req.params.id, { password: 0 }).lean();
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -129,10 +124,9 @@ export const getUserById = async (req, res, next) => {
 
 export const updateUser = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-      if (!_dbReady) {
-        return res.status(503).json({ message: "Database unavailable." });
-      }
+    if (!await ensureDB()) {
+      return res.status(503).json({ message: "Database unavailable." });
+    }
 
     const { name, email, phoneNumber, username, role, password } = req.body;
 
@@ -184,10 +178,9 @@ export const updateUser = async (req, res, next) => {
 
 export const deleteUser = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-      if (!_dbReady) {
-        return res.status(503).json({ message: "Database unavailable." });
-      }
+    if (!await ensureDB()) {
+      return res.status(503).json({ message: "Database unavailable." });
+    }
 
     const targetUser = await User.findById(req.params.id);
     if (!targetUser) {
@@ -223,7 +216,7 @@ export const loginAdmin = async (req, res, next) => {
     const normalizedInput = String(email || "").toLowerCase().trim();
     const cleanPassword = String(password || "").trim();
 
-    if (!isDatabaseReady()) {
+    if (!await ensureDB()) {
       if (role === "employee") {
         return res.status(503).json({ message: "Database offline. Employee login unavailable." });
       }
@@ -297,7 +290,7 @@ export const loginAdmin = async (req, res, next) => {
 
 export const logoutUser = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
+    if (!await ensureDB()) {
       return res.status(200).json({ message: "Logged out successfully" });
     }
     await User.findByIdAndUpdate(req.user._id, { tokenVersion: 0 });
@@ -312,7 +305,7 @@ export const getProfile = async (req, res, next) => {
     const userId = req.user?._id || req.user?.id;
     const userEmail = (req.user?.email || "").toLowerCase();
 
-    if (!isDatabaseReady() || userId === "admin-fallback") {
+    if (!await ensureDB() || userId === "admin-fallback") {
       const fixed = getFixedAdminUser();
       return res.status(200).json({
         data: {
@@ -350,7 +343,7 @@ export const updateProfile = async (req, res, next) => {
     const userEmail = (req.user?.email || "").toLowerCase();
     const { name, email, phoneNumber, username, currentPassword, newPassword } = req.body;
 
-    if (!isDatabaseReady() || userId === "admin-fallback") {
+    if (!await ensureDB() || userId === "admin-fallback") {
       return res.status(200).json({
         message: "Profile updated successfully",
         data: {
@@ -448,10 +441,9 @@ export const updateProfile = async (req, res, next) => {
 
 export const bulkImportUsers = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-      if (!_dbReady) {
-        return res.status(503).json({ message: "Database unavailable." });
-      }
+    if (!await ensureDB()) {
+      return res.status(503).json({ message: "Database unavailable." });
+    }
 
     const { rows } = req.body;
     if (!rows || !Array.isArray(rows) || rows.length === 0) {

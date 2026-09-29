@@ -1,4 +1,4 @@
-import { isDatabaseReady, ensureDB } from "../config/db.js";
+import { ensureDB } from "../config/db.js";
 import { Customer } from "../models/Customer.js";
 import { User } from "../models/User.js";
 import { EmployeeRecord } from "../models/EmployeeRecord.js";
@@ -149,8 +149,9 @@ const normalizeCustomer = (c) => ({
 
 export const getCustomers = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(200).json({ data: [] });
+    const dbReady = await ensureDB();
+    if (!dbReady) {
+      
     }
 
     const filter = buildCustomerFilter(req);
@@ -172,10 +173,9 @@ export const getCustomers = async (req, res, next) => {
  */
 export const exportCustomersCSV = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader("Content-Disposition", "attachment; filename=\"leads.csv\"");
-      return res.send("Appointment ID,Message\r\n\"\",\"Database not ready\"");
+    const dbReady = await ensureDB();
+    if (!dbReady) {
+      
     }
 
     const filter = buildCustomerFilter(req);
@@ -263,10 +263,10 @@ export const exportCustomersCSV = async (req, res, next) => {
 
 export const createCustomer = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-      if (!_dbReady) {
-        return res.status(503).json({ message: "Database unavailable." });
-      }
+    const dbReady = await ensureDB();
+    if (!dbReady) {
+      return res.status(503).json({ message: "Database unavailable." });
+    }
 
     const {
       customerName, mobile, email, remark, district, state, followUp,
@@ -349,10 +349,10 @@ export const createCustomer = async (req, res, next) => {
 
 export const updateCustomer = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-      if (!_dbReady) {
-        return res.status(503).json({ message: "Database unavailable." });
-      }
+    const dbReady = await ensureDB();
+    if (!dbReady) {
+      return res.status(503).json({ message: "Database unavailable." });
+    }
 
     const customer = await Customer.findById(req.params.id);
     if (!customer) {
@@ -467,10 +467,10 @@ export const updateCustomer = async (req, res, next) => {
 
 export const deleteCustomer = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-      if (!_dbReady) {
-        return res.status(503).json({ message: "Database unavailable." });
-      }
+    const dbReady = await ensureDB();
+    if (!dbReady) {
+      return res.status(503).json({ message: "Database unavailable." });
+    }
 
     const customer = await Customer.findById(req.params.id);
     if (!customer) {
@@ -529,10 +529,10 @@ export const deleteCustomer = async (req, res, next) => {
 
 export const bulkImportCustomers = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-      if (!_dbReady) {
-        return res.status(503).json({ message: "Database unavailable." });
-      }
+    const dbReady = await ensureDB();
+    if (!dbReady) {
+      return res.status(503).json({ message: "Database unavailable." });
+    }
 
     const { rows } = req.body;
     if (!rows || !Array.isArray(rows) || rows.length === 0) {
@@ -688,8 +688,9 @@ export const getEmployeesList = async (req, res, next) => {
       return res.status(200).json(cachedEmployeesList);
     }
 
-    if (!isDatabaseReady()) {
-      return res.status(200).json({ data: [], users: [] });
+    const dbReady = await ensureDB();
+    if (!dbReady) {
+      
     }
     const users = await User.find({}, "_id name email role")
       .sort({ name: 1 })

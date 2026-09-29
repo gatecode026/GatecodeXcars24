@@ -1,4 +1,4 @@
-import { isDatabaseReady, ensureDB } from "../config/db.js";
+import { ensureDB } from "../config/db.js";
 import { PerformanceTarget } from "../models/PerformanceTarget.js";
 import { User } from "../models/User.js";
 import { recordActivity } from "./activityController.js";
@@ -32,8 +32,8 @@ const getPeriodParams = (query) => {
  */
 export const getPerformanceSettings = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-    if (!_dbReady) return res.status(503).json({ message: "Database unavailable." });
+    const dbReady = await ensureDB();
+    if (!dbReady) return res.status(503).json({ message: "Database unavailable." });
     const current = await getCurrentTarget();
     const history = await PerformanceTarget.find()
       .sort({ effectiveFrom: -1 })
@@ -52,8 +52,8 @@ export const getPerformanceSettings = async (req, res, next) => {
  */
 export const updatePerformanceSettings = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-    if (!_dbReady) return res.status(503).json({ message: "Database unavailable." });
+    const dbReady = await ensureDB();
+    if (!dbReady) return res.status(503).json({ message: "Database unavailable." });
 
     const {
       dailyAppointmentTarget,
@@ -144,8 +144,8 @@ export const updatePerformanceSettings = async (req, res, next) => {
  */
 export const getAdminPerformanceRanking = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-    if (!_dbReady) return res.status(503).json({ message: "Database unavailable." });
+    const dbReady = await ensureDB();
+    if (!dbReady) return res.status(503).json({ message: "Database unavailable." });
     const { month, year } = getPeriodParams(req.query);
     const summary = await getAdminMonthlySummary(month, year);
     return res.status(200).json({ data: summary });
@@ -159,8 +159,8 @@ export const getAdminPerformanceRanking = async (req, res, next) => {
  */
 export const getAdminEmployeePerformanceDetail = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-    if (!_dbReady) return res.status(503).json({ message: "Database unavailable." });
+    const dbReady = await ensureDB();
+    if (!dbReady) return res.status(503).json({ message: "Database unavailable." });
     const { id } = req.params;
     const { month, year } = getPeriodParams(req.query);
 
@@ -198,8 +198,8 @@ export const getAdminEmployeePerformanceDetail = async (req, res, next) => {
  */
 export const getAdminBonusReport = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-    if (!_dbReady) return res.status(503).json({ message: "Database unavailable." });
+    const dbReady = await ensureDB();
+    if (!dbReady) return res.status(503).json({ message: "Database unavailable." });
     const { month, year } = getPeriodParams(req.query);
     const rankings = await calculateEmployeeRankings(month, year);
 
@@ -233,8 +233,8 @@ export const getAdminBonusReport = async (req, res, next) => {
  */
 export const exportBonusReportCSV = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-    if (!_dbReady) return res.status(503).json({ message: "Database unavailable." });
+    const dbReady = await ensureDB();
+    if (!dbReady) return res.status(503).json({ message: "Database unavailable." });
     const { month, year } = getPeriodParams(req.query);
     const rankings = await calculateEmployeeRankings(month, year);
 
@@ -295,8 +295,8 @@ export const exportBonusReportCSV = async (req, res, next) => {
  */
 export const getMyPerformance = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-    if (!_dbReady) return res.status(503).json({ message: "Database unavailable." });
+    const dbReady = await ensureDB();
+    if (!dbReady) return res.status(503).json({ message: "Database unavailable." });
 
     const empId = req.user?._id || req.user?.id;
     if (!empId) return res.status(401).json({ message: "Unauthorized." });
@@ -332,8 +332,8 @@ export const getMyPerformance = async (req, res, next) => {
  */
 export const getMyDailyHistory = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-    if (!_dbReady) return res.status(503).json({ message: "Database unavailable." });
+    const dbReady = await ensureDB();
+    if (!dbReady) return res.status(503).json({ message: "Database unavailable." });
 
     const empId = req.user?._id || req.user?.id;
     if (!empId) return res.status(401).json({ message: "Unauthorized." });

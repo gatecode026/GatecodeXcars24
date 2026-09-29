@@ -2,17 +2,12 @@ import { Customer } from "../models/Customer.js";
 import { Order } from "../models/Order.js";
 import { ReturnRequest } from "../models/ReturnRequest.js";
 import { User } from "../models/User.js";
-import { isDatabaseReady, ensureDB, connectDB } from "../config/db.js";
+import { ensureDB } from "../config/db.js";
 
 export const getDashboardSummary = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      try {
-        await connectDB();
-      } catch (_) {}
-    }
-
-    if (!isDatabaseReady()) {
+    const dbReady = await ensureDB();
+    if (!dbReady) {
       return res.status(200).json({
         data: {
           totalLeads: 0,

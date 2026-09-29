@@ -1,4 +1,4 @@
-import { isDatabaseReady, ensureDB } from "../config/db.js";
+import { ensureDB } from "../config/db.js";
 import { Order } from "../models/Order.js";
 import { ReturnRequest } from "../models/ReturnRequest.js";
 import { CallingRecord } from "../models/CallingRecord.js";
@@ -68,7 +68,7 @@ const getDateRange = (filter, startDate, endDate) => {
 
 export const getEmployeeDashboard = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
+    if (!await ensureDB()) {
       return res.status(200).json({
         data: {
           name: getEmployeeName(req),
@@ -134,7 +134,7 @@ export const getEmployeeDashboard = async (req, res, next) => {
 
 export const getEmployeeOrdersHistory = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
+    if (!await ensureDB()) {
       return res.status(200).json({ data: [] });
     }
     const employeeId = getEmployeeId(req);
@@ -150,7 +150,7 @@ export const getEmployeeOrdersHistory = async (req, res, next) => {
 
 export const getEmployeeReturnsHistory = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
+    if (!await ensureDB()) {
       return res.status(200).json({ data: [] });
     }
     const employeeId = getEmployeeId(req);
@@ -256,7 +256,7 @@ export const deleteEmployeeReturn = async (req, res, next) => {
 
 export const getEmployeeCallingRecords = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
+    if (!await ensureDB()) {
       return res.status(200).json({ data: [] });
     }
     const employeeId = getEmployeeId(req);
@@ -369,10 +369,9 @@ export const updateEmployeeCallingRecord = async (req, res, next) => {
 
 export const bulkImportEmployeeCallingRecords = async (req, res, next) => {
   try {
-    const _dbReady = await ensureDB();
-      if (!_dbReady) {
-        return res.status(503).json({ message: "Database unavailable." });
-      }
+    if (!await ensureDB()) {
+      return res.status(503).json({ message: "Database unavailable." });
+    }
 
     const employeeId = getEmployeeId(req);
     const employeeName = getEmployeeName(req);
