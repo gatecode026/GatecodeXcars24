@@ -75,7 +75,7 @@ const EmployeeSidebar = () => {
           </div>
         </div>
 
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
           <span className="sidebar-section-label">Operations</span>
           <NavLink to="/employee/dashboard" className="sidebar-link" end onClick={closeSidebar}>
             <span className="sidebar-icon"><DashboardIcon /></span>

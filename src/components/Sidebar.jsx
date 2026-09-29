@@ -157,7 +157,7 @@ const Sidebar = () => {
         </div>
 
         {/* Navigation Groups */}
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
           <span className="sidebar-section-label">Main</span>
           <NavLink to="/admin/dashboard" className="sidebar-link" onClick={closeSidebar}>
             <span className="sidebar-icon"><DashboardIcon /></span>

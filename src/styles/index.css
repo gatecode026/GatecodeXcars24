@@ -319,10 +319,20 @@ button, input, select, textarea {
 .sidebar-nav {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 16px 12px;
   display: flex;
   flex-direction: column;
   gap: 3px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-nav::-webkit-scrollbar,
+.sidebar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .sidebar-section-label {
