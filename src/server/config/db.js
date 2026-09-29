@@ -33,6 +33,9 @@ function loadEnvFallback() {
   }
 }
 loadEnvFallback();
+if (!process.env.JWT_SECRET) {
+  process.env.JWT_SECRET = "mySuperSecretKey123";
+}
 
 let cached = global.mongoose;
 if (!cached) {

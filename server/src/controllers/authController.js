@@ -14,10 +14,12 @@ const isFixedAdminCredentials = (email, password) =>
   email === (process.env.ADMIN_EMAIL || "sales@rmaxiot.in") &&
   password === (process.env.ADMIN_PASSWORD || "rmax@2026");
 
+const getJwtSecret = () => process.env.JWT_SECRET || "mySuperSecretKey123";
+
 const signToken = (user) =>
   jwt.sign(
     { id: user.id || user._id, name: user.name, email: user.email, role: user.role, tokenVersion: user.tokenVersion ?? 0 },
-    process.env.JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
   );
 

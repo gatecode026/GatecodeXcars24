@@ -23,6 +23,8 @@ const getTokenFromHeader = (req) => {
   return authHeader.split(" ")[1];
 };
 
+const getJwtSecret = () => process.env.JWT_SECRET || "mySuperSecretKey123";
+
 export const protect = async (req, res, next) => {
   try {
     const token = getTokenFromHeader(req);
@@ -30,7 +32,7 @@ export const protect = async (req, res, next) => {
       return res.status(401).json({ message: "Unauthorized. Token missing." });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, getJwtSecret());
 
     if (!isDatabaseReady()) {
       if (decoded.role !== "admin") {
