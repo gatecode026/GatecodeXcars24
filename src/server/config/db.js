@@ -93,3 +93,16 @@ export const connectDB = async (timeoutMs = 10000) => {
     throw err;
   }
 };
+
+/**
+ * ensureDB - tries connectDB if not ready, then checks again.
+ * Returns true if DB is ready, false otherwise.
+ * Use this instead of raw isDatabaseReady() in controllers.
+ */
+export const ensureDB = async () => {
+  if (isDatabaseReady()) return true;
+  try {
+    await connectDB();
+  } catch (_) {}
+  return isDatabaseReady();
+};

@@ -1,4 +1,4 @@
-import { isDatabaseReady } from "../config/db.js";
+import { isDatabaseReady, ensureDB } from "../config/db.js";
 import { Order } from "../models/Order.js";
 import { ReturnRequest } from "../models/ReturnRequest.js";
 import { CallingRecord } from "../models/CallingRecord.js";
@@ -369,9 +369,10 @@ export const updateEmployeeCallingRecord = async (req, res, next) => {
 
 export const bulkImportEmployeeCallingRecords = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable." });
+      }
 
     const employeeId = getEmployeeId(req);
     const employeeName = getEmployeeName(req);

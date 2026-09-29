@@ -1,4 +1,4 @@
-import { isDatabaseReady } from "../config/db.js";
+import { isDatabaseReady, ensureDB } from "../config/db.js";
 import { Customer } from "../models/Customer.js";
 import { User } from "../models/User.js";
 import { EmployeeRecord } from "../models/EmployeeRecord.js";
@@ -263,9 +263,10 @@ export const exportCustomersCSV = async (req, res, next) => {
 
 export const createCustomer = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable." });
+      }
 
     const {
       customerName, mobile, email, remark, district, state, followUp,
@@ -348,9 +349,10 @@ export const createCustomer = async (req, res, next) => {
 
 export const updateCustomer = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable." });
+      }
 
     const customer = await Customer.findById(req.params.id);
     if (!customer) {
@@ -465,9 +467,10 @@ export const updateCustomer = async (req, res, next) => {
 
 export const deleteCustomer = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable." });
+      }
 
     const customer = await Customer.findById(req.params.id);
     if (!customer) {
@@ -526,9 +529,10 @@ export const deleteCustomer = async (req, res, next) => {
 
 export const bulkImportCustomers = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable." });
+      }
 
     const { rows } = req.body;
     if (!rows || !Array.isArray(rows) || rows.length === 0) {

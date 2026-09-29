@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { isDatabaseReady } from "../config/db.js";
+import { isDatabaseReady, ensureDB, connectDB } from "../config/db.js";
 import { User } from "../models/User.js";
 
 const getFixedAdminUser = () => ({
@@ -40,8 +40,12 @@ const signToken = (user) =>
 export const registerUser = async (req, res, next) => {
   try {
     if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable. Cannot register user." });
+      try { await connectDB(); } catch (_) {}
     }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable. Cannot register user." });
+      }
 
     const { name, email, password, phoneNumber, username, role } = req.body;
     const assignedRole = ["admin", "employee"].includes(role) ? role : "user";
@@ -109,9 +113,10 @@ export const getUsers = async (req, res, next) => {
 
 export const getUserById = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable." });
+      }
     const user = await User.findById(req.params.id, { password: 0 }).lean();
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -124,9 +129,10 @@ export const getUserById = async (req, res, next) => {
 
 export const updateUser = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable." });
+      }
 
     const { name, email, phoneNumber, username, role, password } = req.body;
 
@@ -178,9 +184,10 @@ export const updateUser = async (req, res, next) => {
 
 export const deleteUser = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable." });
+      }
 
     const targetUser = await User.findById(req.params.id);
     if (!targetUser) {
@@ -441,9 +448,10 @@ export const updateProfile = async (req, res, next) => {
 
 export const bulkImportUsers = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable." });
+      }
 
     const { rows } = req.body;
     if (!rows || !Array.isArray(rows) || rows.length === 0) {

@@ -1,4 +1,4 @@
-import { isDatabaseReady } from "../config/db.js";
+import { isDatabaseReady, ensureDB } from "../config/db.js";
 import { ActivityLog } from "../models/ActivityLog.js";
 
 /**

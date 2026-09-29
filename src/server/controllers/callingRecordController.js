@@ -1,12 +1,13 @@
-import { isDatabaseReady } from "../config/db.js";
+import { isDatabaseReady, ensureDB } from "../config/db.js";
 import { CallingRecord } from "../models/CallingRecord.js";
 import { User } from "../models/User.js";
 
 export const getCallingRecords = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable." });
+      }
 
     const { startDate, endDate, employeeId } = req.query;
     const filter = {};
@@ -42,9 +43,10 @@ export const getCallingRecords = async (req, res, next) => {
 
 export const createCallingRecord = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable." });
+      }
 
     const {
       employeeId, date, outgoingCalls, incomingCalls, connectedCalls,
@@ -85,9 +87,10 @@ export const createCallingRecord = async (req, res, next) => {
 
 export const deleteCallingRecord = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable." });
+      }
 
     const record = await CallingRecord.findByIdAndDelete(req.params.id);
     if (!record) {
@@ -102,9 +105,10 @@ export const deleteCallingRecord = async (req, res, next) => {
 
 export const bulkImportCallingRecords = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable." });
+      }
 
     const { rows } = req.body;
     if (!rows || !Array.isArray(rows) || rows.length === 0) {

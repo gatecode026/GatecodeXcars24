@@ -1,11 +1,12 @@
-import { isDatabaseReady } from "../config/db.js";
+import { isDatabaseReady, ensureDB } from "../config/db.js";
 import { Order } from "../models/Order.js";
 
 export const createOrder = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable. Cannot create order." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable. Cannot create order." });
+      }
     const numberOfUnits = Number(req.body.numberOfUnits || 0);
     const amount = Number(req.body.amount || 0);
     const totalAmount = numberOfUnits * amount;
@@ -52,9 +53,10 @@ export const getOrders = async (req, res, next) => {
 
 export const updateOrder = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable. Cannot update order." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable. Cannot update order." });
+      }
     const allowedFields = [
       "customerName", "mobileNumber", "alternateMobileNumber", "fullAddress", "pincode",
       "productType", "customProductName", "numberOfUnits", "amount",
@@ -77,9 +79,10 @@ export const updateOrder = async (req, res, next) => {
 
 export const updateParcelStatus = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable. Cannot update parcel." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable. Cannot update parcel." });
+      }
     const update = { parcelStatus: req.body.parcelStatus };
     if (req.body.trackingId !== undefined) update.trackingId = req.body.trackingId;
     if (req.body.courierCompany !== undefined) update.courierCompany = req.body.courierCompany;
@@ -96,9 +99,10 @@ export const updateParcelStatus = async (req, res, next) => {
 
 export const deleteOrder = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable. Cannot delete order." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable. Cannot delete order." });
+      }
     const order = await Order.findByIdAndDelete(req.params.id);
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
@@ -111,9 +115,10 @@ export const deleteOrder = async (req, res, next) => {
 
 export const updateOrderStatus = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable. Cannot update order." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable. Cannot update order." });
+      }
     const order = await Order.findByIdAndUpdate(
       req.params.id,
       { orderStatus: req.body.orderStatus },
@@ -130,9 +135,10 @@ export const updateOrderStatus = async (req, res, next) => {
 
 export const bulkImportOrders = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable." });
+      }
 
     const { rows } = req.body;
     if (!rows || !Array.isArray(rows) || rows.length === 0) {

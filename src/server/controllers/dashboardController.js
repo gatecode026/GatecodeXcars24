@@ -2,7 +2,7 @@ import { Customer } from "../models/Customer.js";
 import { Order } from "../models/Order.js";
 import { ReturnRequest } from "../models/ReturnRequest.js";
 import { User } from "../models/User.js";
-import { isDatabaseReady, connectDB } from "../config/db.js";
+import { isDatabaseReady, ensureDB, connectDB } from "../config/db.js";
 
 export const getDashboardSummary = async (req, res, next) => {
   try {

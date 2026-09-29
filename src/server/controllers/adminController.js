@@ -1,4 +1,4 @@
-import { isDatabaseReady } from "../config/db.js";
+import { isDatabaseReady, ensureDB } from "../config/db.js";
 import { Order } from "../models/Order.js";
 import { ReturnRequest } from "../models/ReturnRequest.js";
 import { CallingRecord } from "../models/CallingRecord.js";
@@ -177,9 +177,10 @@ export const getEmployeeDetails = async (req, res, next) => {
 
 export const getRevenueSummary = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable." });
+      }
 
     const now = new Date();
     const filterMonth = parseInt(req.query.month);
@@ -305,9 +306,10 @@ export const getEmployeeSummary = async (req, res, next) => {
 
 export const getSalesSummary = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
-    }
+    const _dbReady = await ensureDB();
+      if (!_dbReady) {
+        return res.status(503).json({ message: "Database unavailable." });
+      }
 
     const now = new Date();
     const filterMonth = parseInt(req.query.month);
