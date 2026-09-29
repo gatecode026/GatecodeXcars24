@@ -12,8 +12,8 @@ const debugLog = (msg) => {
 
 const getFixedAdminUser = () => ({
   id: "admin-fallback",
-  name: process.env.ADMIN_NAME || "RMAX Admin",
-  email: process.env.ADMIN_EMAIL || "sales@rmaxiot.in",
+  name: process.env.ADMIN_NAME || "Surendra Admin",
+  email: (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase(),
   role: "admin"
 });
 
@@ -59,8 +59,8 @@ export const protect = async (req, res, next) => {
       return next();
     }
 
-    const adminEmail = process.env.ADMIN_EMAIL || "sales@rmaxiot.in";
-    if (decoded.role === "admin" || decoded.email === adminEmail) {
+    const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase();
+    if (decoded.role === "admin" || (decoded.email && decoded.email.toLowerCase() === adminEmail)) {
       req.user = getFixedAdminUser();
       return next();
     }
@@ -72,34 +72,26 @@ export const protect = async (req, res, next) => {
 };
 
 export const adminOnly = (req, res, next) => {
-  // Primary check: decode JWT directly
+  const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase();
+
+  // Primary check: if protect already resolved admin
+  if (req.user) {
+    if (req.user.role === "admin" || (req.user.email && req.user.email.toLowerCase() === adminEmail)) {
+      return next();
+    }
+  }
+
+  // Secondary check: decode JWT directly
   const token = getTokenFromHeader(req);
   if (token) {
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const adminEmail = process.env.ADMIN_EMAIL || "sales@rmaxiot.in";
-      debugLog(`adminOnly JWT check: role=${decoded.role}, email=${decoded.email}, adminEmail=${adminEmail}`);
-      if (decoded.role === "admin" || decoded.email === adminEmail) {
+      const decoded = jwt.verify(token, getJwtSecret());
+      if (decoded.role === "admin" || (decoded.email && decoded.email.toLowerCase() === adminEmail)) {
         return next();
       }
-      debugLog(`adminOnly JWT check FAILED`);
     } catch (e) {
       debugLog(`adminOnly JWT verify error: ${e.message}`);
     }
-  } else {
-    debugLog(`adminOnly: no token found in header`);
-  }
-
-  // Fallback: check req.user
-  if (req.user) {
-    const adminEmail = process.env.ADMIN_EMAIL || "sales@rmaxiot.in";
-    debugLog(`adminOnly fallback: user.role=${req.user.role}, user.email=${req.user.email}`);
-    if (req.user.role === "admin" || req.user.email?.toLowerCase() === adminEmail.toLowerCase()) {
-      return next();
-    }
-    debugLog(`adminOnly fallback FAILED`);
-  } else {
-    debugLog(`adminOnly: no req.user`);
   }
 
   return res.status(403).json({ message: "Forbidden. Admin access required." });

@@ -65,19 +65,6 @@ const LoginPage = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Quick fill helper for convenience
-  const fillCredentials = (role) => {
-    setSelectedRole(role);
-    setError("");
-    if (role === "admin") {
-      setEmail("surendraadmin@gmail.com");
-      setPassword("surendra");
-    } else {
-      setEmail("gatecode");
-      setPassword("123456");
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -147,29 +134,6 @@ const LoginPage = () => {
                 <span className="segment-role-dot admin" />
                 <span>Administrator</span>
               </button>
-            </div>
-
-            {/* Quick-Fill Helpers */}
-            <div className="login-quick-fill-bar">
-              <span className="quick-fill-label">Demo Access:</span>
-              <div className="quick-fill-chips-group">
-                <button
-                  type="button"
-                  className="quick-fill-chip chip-admin"
-                  onClick={() => fillCredentials("admin")}
-                  title="Auto-fill Administrator credentials"
-                >
-                  ⚡ Admin / TL
-                </button>
-                <button
-                  type="button"
-                  className="quick-fill-chip chip-executive"
-                  onClick={() => fillCredentials("employee")}
-                  title="Auto-fill Executive credentials"
-                >
-                  ⚡ Executive
-                </button>
-              </div>
             </div>
 
             {/* Error Message Alert */}

@@ -355,8 +355,18 @@ const AdminDashboardPage = () => {
         setSummary(res.data.data);
       }
     } catch (err) {
-      console.error("Error fetching dashboard summary:", err);
-      showToast("Failed to load dashboard metrics", "error");
+      console.warn("First attempt fetching dashboard summary failed, retrying...", err?.message);
+      try {
+        await new Promise((r) => setTimeout(r, 600));
+        const retryRes = await api.get("/dashboard/summary", { skipCache: true });
+        if (retryRes.data?.data) {
+          setSummary(retryRes.data.data);
+          return;
+        }
+      } catch (retryErr) {
+        console.error("Retry fetching dashboard summary also failed:", retryErr);
+        showToast("Failed to load dashboard metrics", "error");
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
