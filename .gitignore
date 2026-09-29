@@ -5,10 +5,12 @@ server/node_modules/
 
 # env files
 .env
+.env*.local
 client/.env
 server/.env
 
 # build files
+.next/
 client/dist
 client/build
 

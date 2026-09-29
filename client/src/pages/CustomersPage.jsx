@@ -737,11 +737,40 @@ const CustomersPage = ({ defaultTab = "all" }) => {
               <div className="modal-body modal-body-compact">
                 {/* 1. Customer & Vehicle Details (Row 1) */}
                 <div className="compact-section-box">
-                  <div className="compact-section-title">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    <span>1. Customer &amp; Vehicle Information</span>
+                  <div className="compact-section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      <span>1. Customer &amp; Vehicle Information</span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: "10.5px",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.03em",
+                        color: formData.verificationStatus === "Verified" ? "#16a34a" : "#64748b",
+                        background: formData.verificationStatus === "Verified" ? "#dcfce7" : "#f1f5f9",
+                        border: formData.verificationStatus === "Verified" ? "1px solid #bbf7d0" : "1px solid #e2e8f0",
+                        padding: "2px 8px",
+                        borderRadius: "12px",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px"
+                      }}
+                    >
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: formData.verificationStatus === "Verified" ? "#16a34a" : "#94a3b8" }}></span>
+                      {formData.verificationStatus === "Verified" ? "Verified" : "Pending"}
+                    </span>
                   </div>
-                  <div className="compact-grid-4">
+                  <div
+                    className="compact-grid-4 compact-grid-5"
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1.25fr 1.15fr 1.15fr 0.95fr 1.1fr",
+                      gap: "10px",
+                      alignItems: "flex-start"
+                    }}
+                  >
                     <div className="form-group">
                       <label className="form-label">CX Name (Customer Name) *</label>
                       <input
@@ -786,6 +815,45 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                         value={formData.odometerKm}
                         onChange={(e) => setFormData({ ...formData, odometerKm: e.target.value })}
                       />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Verified</label>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", height: "35px" }}>
+                        <label
+                          className="yn-switch yn-switch-lg"
+                          title={formData.verificationStatus === "Verified" ? "Verified — click to set Pending" : "Pending — click to set Verified"}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={formData.verificationStatus === "Verified"}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                verificationStatus: e.target.checked ? "Verified" : "Pending"
+                              })
+                            }
+                          />
+                          <span className="yn-slider">
+                            <span className="yn-label-yes">Yes</span>
+                            <span className="yn-label-no">No</span>
+                          </span>
+                        </label>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            letterSpacing: "0.03em",
+                            color: formData.verificationStatus === "Verified" ? "#16a34a" : "#64748b",
+                            padding: "2px 7px",
+                            borderRadius: "10px",
+                            background: formData.verificationStatus === "Verified" ? "#dcfce7" : "#f1f5f9",
+                            border: formData.verificationStatus === "Verified" ? "1px solid #bbf7d0" : "1px solid #e2e8f0"
+                          }}
+                        >
+                          {formData.verificationStatus === "Verified" ? "VERIFIED" : "PENDING"}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>

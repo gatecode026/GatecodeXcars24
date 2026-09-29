@@ -1192,11 +1192,40 @@ const AdminDashboardPage = () => {
               <div className="modal-body modal-body-compact">
                 {/* 1. Customer & Vehicle */}
                 <div className="compact-section-box">
-                  <div className="compact-section-title">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    <span>1. Customer &amp; Vehicle Information</span>
+                  <div className="compact-section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      <span>1. Customer &amp; Vehicle Information</span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: "10.5px",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.03em",
+                        color: newLeadForm.verificationStatus === "Verified" ? "#16a34a" : "#64748b",
+                        background: newLeadForm.verificationStatus === "Verified" ? "#dcfce7" : "#f1f5f9",
+                        border: newLeadForm.verificationStatus === "Verified" ? "1px solid #bbf7d0" : "1px solid #e2e8f0",
+                        padding: "2px 8px",
+                        borderRadius: "12px",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px"
+                      }}
+                    >
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: newLeadForm.verificationStatus === "Verified" ? "#16a34a" : "#94a3b8" }}></span>
+                      {newLeadForm.verificationStatus === "Verified" ? "Verified" : (newLeadForm.verificationStatus || "Pending")}
+                    </span>
                   </div>
-                  <div className="compact-grid-4">
+                  <div
+                    className="compact-grid-4 compact-grid-5"
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1.25fr 1.15fr 1.15fr 0.95fr 1.1fr",
+                      gap: "10px",
+                      alignItems: "flex-start"
+                    }}
+                  >
                     <div className="form-group">
                       <label className="form-label">Customer Name *</label>
                       <input
@@ -1249,6 +1278,45 @@ const AdminDashboardPage = () => {
                           setNewLeadForm({ ...newLeadForm, odometerKm: e.target.value })
                         }
                       />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Verified</label>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", height: "35px" }}>
+                        <label
+                          className="yn-switch yn-switch-lg"
+                          title={newLeadForm.verificationStatus === "Verified" ? "Verified — click to set Pending" : "Pending — click to set Verified"}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={newLeadForm.verificationStatus === "Verified"}
+                            onChange={(e) =>
+                              setNewLeadForm({
+                                ...newLeadForm,
+                                verificationStatus: e.target.checked ? "Verified" : "Pending"
+                              })
+                            }
+                          />
+                          <span className="yn-slider">
+                            <span className="yn-label-yes">Yes</span>
+                            <span className="yn-label-no">No</span>
+                          </span>
+                        </label>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            letterSpacing: "0.03em",
+                            color: newLeadForm.verificationStatus === "Verified" ? "#16a34a" : "#64748b",
+                            padding: "2px 7px",
+                            borderRadius: "10px",
+                            background: newLeadForm.verificationStatus === "Verified" ? "#dcfce7" : "#f1f5f9",
+                            border: newLeadForm.verificationStatus === "Verified" ? "1px solid #bbf7d0" : "1px solid #e2e8f0"
+                          }}
+                        >
+                          {newLeadForm.verificationStatus === "Verified" ? "VERIFIED" : (newLeadForm.verificationStatus || "PENDING").toUpperCase()}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1433,11 +1501,40 @@ const AdminDashboardPage = () => {
               <div className="modal-body modal-body-compact">
                 {/* 1. Customer & Vehicle Details */}
                 <div className="compact-section-box">
-                  <div className="compact-section-title">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    <span>1. Customer Information &amp; Vehicle Details</span>
+                  <div className="compact-section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      <span>1. Customer Information &amp; Vehicle Details</span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: "10.5px",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.03em",
+                        color: editLeadForm.verificationStatus === "Verified" ? "#16a34a" : "#64748b",
+                        background: editLeadForm.verificationStatus === "Verified" ? "#dcfce7" : "#f1f5f9",
+                        border: editLeadForm.verificationStatus === "Verified" ? "1px solid #bbf7d0" : "1px solid #e2e8f0",
+                        padding: "2px 8px",
+                        borderRadius: "12px",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px"
+                      }}
+                    >
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: editLeadForm.verificationStatus === "Verified" ? "#16a34a" : "#94a3b8" }}></span>
+                      {editLeadForm.verificationStatus === "Verified" ? "Verified" : (editLeadForm.verificationStatus || "Pending")}
+                    </span>
                   </div>
-                  <div className="compact-grid-4">
+                  <div
+                    className="compact-grid-4 compact-grid-5"
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1.25fr 1.15fr 1.15fr 0.95fr 1.1fr",
+                      gap: "10px",
+                      alignItems: "flex-start"
+                    }}
+                  >
                     <div className="form-group">
                       <label className="form-label">Customer Name *</label>
                       <input
@@ -1490,6 +1587,45 @@ const AdminDashboardPage = () => {
                           setEditLeadForm({ ...editLeadForm, odometerKm: e.target.value })
                         }
                       />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Verified</label>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", height: "35px" }}>
+                        <label
+                          className="yn-switch yn-switch-lg"
+                          title={editLeadForm.verificationStatus === "Verified" ? "Verified — click to set Pending" : "Pending — click to set Verified"}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={editLeadForm.verificationStatus === "Verified"}
+                            onChange={(e) =>
+                              setEditLeadForm({
+                                ...editLeadForm,
+                                verificationStatus: e.target.checked ? "Verified" : "Pending"
+                              })
+                            }
+                          />
+                          <span className="yn-slider">
+                            <span className="yn-label-yes">Yes</span>
+                            <span className="yn-label-no">No</span>
+                          </span>
+                        </label>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            letterSpacing: "0.03em",
+                            color: editLeadForm.verificationStatus === "Verified" ? "#16a34a" : "#64748b",
+                            padding: "2px 7px",
+                            borderRadius: "10px",
+                            background: editLeadForm.verificationStatus === "Verified" ? "#dcfce7" : "#f1f5f9",
+                            border: editLeadForm.verificationStatus === "Verified" ? "1px solid #bbf7d0" : "1px solid #e2e8f0"
+                          }}
+                        >
+                          {editLeadForm.verificationStatus === "Verified" ? "VERIFIED" : (editLeadForm.verificationStatus || "PENDING").toUpperCase()}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>

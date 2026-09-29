@@ -1,6 +1,6 @@
 # GatecodeXcars24
 
-**Used-Car CRM & Operations Platform**
+**Used-Car CRM & Operations Platform (Next.js Unified Full-Stack)**
 
 Enterprise automotive operations and customer relationship management platform featuring admin operations, team leader controls, executive CRM, car procurement, order lifecycle tracking, customer management, calling records, and performance metrics.
 
@@ -8,12 +8,13 @@ Enterprise automotive operations and customer relationship management platform f
 
 | Layer | Technology |
 |-------|-----------|
-| **Frontend** | React 19 + Vite 8 + React Router 7 + Axios |
-| **Backend** | Node.js + Express 5 + Mongoose + JWT |
-| **Database** | MongoDB (via Mongoose ODM) |
-| **Auth** | bcryptjs hashing + JSON Web Tokens |
-| **Validation** | express-validator (server) + custom utils (client) |
-| **File Upload** | Multer |
+| **Framework** | Next.js 15 (App Router, Unified Full-Stack) |
+| **Frontend** | React 19 + Axios + React-Router-DOM compatibility layer |
+| **Backend API** | Next.js Route Handlers (`app/api/[...slug]`, `app/api/health`) |
+| **Database** | MongoDB (via Mongoose ODM with connection caching) |
+| **Auth** | bcryptjs hashing + JSON Web Tokens (JWT) |
+| **Validation** | express-validator execution in Next.js handlers + custom utils |
+| **File Upload** | Native multipart form handling + `/uploads/[...path]` route handler |
 | **PDF** | jsPDF + jspdf-autotable |
 | **Design** | Clean SaaS Light UI with GatecodeXcars24 Official Brand Colors |
 
@@ -21,30 +22,30 @@ Enterprise automotive operations and customer relationship management platform f
 
 ```
 GatecodeXcars24/
-├── client/                    # React frontend (Vite)
-│   ├── src/
-│   │   ├── api/               # Axios client
-│   │   ├── components/        # Reusable UI components
-│   │   ├── context/           # Auth context provider
-│   │   ├── pages/             # Page components
-│   │   ├── utils/             # Client-side validators
-│   │   ├── App.jsx            # Routes & layout
-│   │   └── main.jsx           # Entry point
-│   └── .env.example
-├── server/                    # Express backend
-│   ├── src/
-│   │   ├── config/            # DB connection, seed admin
-│   │   ├── controllers/       # Route handlers
-│   │   ├── middleware/        # Auth, validation, upload, error handling
-│   │   ├── models/            # Mongoose schemas
-│   │   ├── routes/            # Express route definitions
-│   │   ├── validators/        # express-validator rules
-│   │   ├── app.js             # Express app setup
-│   │   └── server.js          # Entry point
-│   ├── uploads/               # Uploaded files
-│   └── .env.example
-├── package.json               # Monorepo workspaces
-└── render.yaml                # Render deployment config
+├── app/                       # Next.js App Router
+│   ├── layout.jsx             # Root layout with fonts, AuthProvider & styles
+│   ├── page.jsx               # Root role-based redirect
+│   ├── not-found.jsx          # Fallback 404 handler
+│   ├── login/                 # Login routes (/login, /login/admin)
+│   ├── admin/                 # Admin layout & 20+ subpages
+│   ├── employee/              # Employee layout & subpages
+│   ├── api/                   # Unified API route handlers (/api/[...slug], /api/health)
+│   └── uploads/               # Dynamic uploads image server with SVG fallback
+├── src/
+│   ├── api/                   # Universal Axios client
+│   ├── compat/                # react-router-dom compatibility layer
+│   ├── components/            # Reusable UI components (Sidebar, TopNavbar, Tables, etc.)
+│   ├── context/               # AuthContext & SidebarContext
+│   ├── pages-components/      # 23 full page components (100% original UI & logic)
+│   ├── server/                # Backend controllers, models, config, validators, services
+│   ├── styles/                # Complete CSS design system (index.css)
+│   └── utils/                 # Client-side validators
+├── public/                    # Static assets & brand logos
+│   └── uploads/               # Uploaded payment screenshots
+├── .env.local                 # Next.js environment configuration
+├── next.config.mjs            # Next.js configuration
+├── package.json               # Next.js unified dependencies & scripts
+└── README.md
 ```
 
 ## Getting Started
@@ -53,11 +54,21 @@ GatecodeXcars24/
 - Node.js 18+
 - MongoDB instance (local or Atlas)
 
-### 1. Clone & Install
+### 1. Install Dependencies
 
 ```bash
-cd GatecodeXcars24
 npm install
+```
+
+### 2. Run Locally
+
+```bash
+# Start Next.js development server
+npm run dev
+
+# Or build and run production server
+npm run build
+npm start
 ```
 
 ### 2. Backend Setup
