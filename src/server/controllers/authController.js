@@ -5,14 +5,28 @@ import { User } from "../models/User.js";
 
 const getFixedAdminUser = () => ({
   id: "admin-fallback",
-  name: process.env.ADMIN_NAME || "RMAX Admin",
-  email: process.env.ADMIN_EMAIL || "sales@rmaxiot.in",
+  name: process.env.ADMIN_NAME || "Surendra Admin",
+  email: (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase(),
   role: "admin"
 });
 
-const isFixedAdminCredentials = (email, password) =>
-  email === (process.env.ADMIN_EMAIL || "sales@rmaxiot.in") &&
-  password === (process.env.ADMIN_PASSWORD || "rmax@2026");
+const isFixedAdminCredentials = (email, password) => {
+  const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase().trim();
+  const adminPassword = (process.env.ADMIN_PASSWORD || "surendra").trim();
+  const inputEmail = String(email || "").toLowerCase().trim();
+  const inputPassword = String(password || "").trim();
+  const allowedUsernames = [
+    adminEmail,
+    adminEmail.split("@")[0],
+    "surendra_admin",
+    "surendra",
+    "admin"
+  ];
+  return (
+    allowedUsernames.includes(inputEmail) &&
+    (inputPassword === adminPassword || inputPassword.toLowerCase() === adminPassword.toLowerCase())
+  );
+};
 
 const signToken = (user) =>
   jwt.sign(
@@ -197,13 +211,15 @@ export const deleteUser = async (req, res, next) => {
 export const loginAdmin = async (req, res, next) => {
   try {
     const { email, password, role } = req.body;
+    const normalizedInput = String(email || "").toLowerCase().trim();
+    const cleanPassword = String(password || "").trim();
 
     if (!isDatabaseReady()) {
       if (role === "employee") {
         return res.status(503).json({ message: "Database offline. Employee login unavailable." });
       }
 
-      if (!isFixedAdminCredentials(email, password)) {
+      if (!isFixedAdminCredentials(normalizedInput, cleanPassword)) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
@@ -215,9 +231,6 @@ export const loginAdmin = async (req, res, next) => {
       });
     }
 
-    const normalizedInput = String(email || "").toLowerCase().trim();
-    const cleanPassword = String(password || "");
-
     const user = await User.findOne({
       $or: [
         { email: normalizedInput },
@@ -226,7 +239,22 @@ export const loginAdmin = async (req, res, next) => {
     });
 
     if (user) {
-      const ok = await bcrypt.compare(cleanPassword, user.password);
+      let ok = await bcrypt.compare(cleanPassword, user.password);
+      if (!ok && cleanPassword.toLowerCase() !== cleanPassword) {
+        ok = await bcrypt.compare(cleanPassword.toLowerCase(), user.password);
+      }
+
+      // If comparison failed, but fixed admin credentials match, auto-sync and allow
+      if (!ok && isFixedAdminCredentials(normalizedInput, cleanPassword)) {
+        ok = true;
+        try {
+          const newHash = await bcrypt.hash(cleanPassword, 10);
+          await User.findByIdAndUpdate(user._id, { password: newHash });
+        } catch (e) {
+          console.error("Auto-sync admin password failed:", e);
+        }
+      }
+
       if (!ok) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
@@ -243,7 +271,7 @@ export const loginAdmin = async (req, res, next) => {
       });
     }
 
-    if (!isFixedAdminCredentials(email.toLowerCase().trim(), password)) {
+    if (!isFixedAdminCredentials(normalizedInput, cleanPassword)) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 

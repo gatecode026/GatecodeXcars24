@@ -13,7 +13,20 @@ const AuthContext = createContext(null);
 
 const decodeToken = (token) => {
   try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
+    if (!token || typeof token !== "string") return null;
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    let base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    while (base64.length % 4) {
+      base64 += "=";
+    }
+    const decodedStr = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    const payload = JSON.parse(decodedStr);
     // Check if token is expired
     if (payload.exp && payload.exp * 1000 < Date.now()) {
       return null;
@@ -66,10 +79,12 @@ export const AuthProvider = ({ children }) => {
       const payload = { email, password };
       if (role) payload.role = role;
       const res = await api.post("/auth/login", payload);
-      const { token } = res.data;
-      localStorage.setItem("dashboard_token", token);
+      const { token, user: serverUser } = res.data;
+      if (token) {
+        localStorage.setItem("dashboard_token", token);
+      }
 
-      const decoded = decodeToken(token);
+      const decoded = decodeToken(token) || serverUser;
       setUser(decoded);
 
       return decoded;
