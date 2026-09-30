@@ -216,16 +216,27 @@ export const loginAdmin = async (req, res, next) => {
     const normalizedInput = String(email || "").toLowerCase().trim();
     const cleanPassword = String(password || "").trim();
 
-    if (!await ensureDB()) {
-      if (role === "employee") {
-        return res.status(503).json({ message: "Database offline. Employee login unavailable." });
-      }
+    const isFixedAdmin = isFixedAdminCredentials(normalizedInput, cleanPassword);
 
-      if (!isFixedAdminCredentials(normalizedInput, cleanPassword)) {
-        return res.status(401).json({ message: "Invalid credentials" });
-      }
-
+    // Fast-path: If admin credentials match, return immediately without blocking!
+    if (isFixedAdmin) {
+      const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase();
       const adminUser = getFixedAdminUser();
+
+      // Check DB in background or quick read to attach _id if available
+      try {
+        if (isDatabaseReady()) {
+          const dbAdmin = await User.findOne({ email: adminEmail }).select("_id name email role tokenVersion").lean();
+          if (dbAdmin) {
+            return res.status(200).json({
+              message: "Login successful",
+              token: signToken({ id: dbAdmin._id, name: dbAdmin.name || adminUser.name, email: dbAdmin.email, role: "admin", tokenVersion: dbAdmin.tokenVersion ?? 0 }),
+              user: { id: dbAdmin._id, name: dbAdmin.name || adminUser.name, email: dbAdmin.email, role: "admin" }
+            });
+          }
+        }
+      } catch (_) {}
+
       return res.status(200).json({
         message: "Login successful",
         token: signToken(adminUser),
@@ -233,10 +244,18 @@ export const loginAdmin = async (req, res, next) => {
       });
     }
 
+    if (!await ensureDB()) {
+      if (role === "employee") {
+        return res.status(503).json({ message: "Database offline. Employee login unavailable." });
+      }
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    // Fast indexed query
     const user = await User.findOne({
       $or: [
         { email: normalizedInput },
-        { username: { $regex: new RegExp(`^${normalizedInput}$`, "i") } }
+        { username: normalizedInput }
       ]
     });
 
@@ -246,24 +265,12 @@ export const loginAdmin = async (req, res, next) => {
         ok = await bcrypt.compare(cleanPassword.toLowerCase(), user.password);
       }
 
-      // If comparison failed, but fixed admin credentials match, auto-sync and allow
-      if (!ok && isFixedAdminCredentials(normalizedInput, cleanPassword)) {
-        ok = true;
-        try {
-          const newHash = await bcrypt.hash(cleanPassword, 10);
-          await User.findByIdAndUpdate(user._id, { password: newHash });
-        } catch (e) {
-          console.error("Auto-sync admin password failed:", e);
-        }
-      }
-
       if (!ok) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
       const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase();
-      const userRole = (user.role === "admin" || user.email.toLowerCase() === adminEmail) ? "admin" : "employee";
-
+      const userRole = (user.role === "admin" || user.email?.toLowerCase() === adminEmail) ? "admin" : "employee";
       const tokenVersion = user.tokenVersion ?? 0;
 
       return res.status(200).json({
@@ -273,16 +280,7 @@ export const loginAdmin = async (req, res, next) => {
       });
     }
 
-    if (!isFixedAdminCredentials(normalizedInput, cleanPassword)) {
-      return res.status(401).json({ message: "Invalid credentials" });
-    }
-
-    const adminUser = getFixedAdminUser();
-    return res.status(200).json({
-      message: "Login successful",
-      token: signToken(adminUser),
-      user: adminUser
-    });
+    return res.status(401).json({ message: "Invalid credentials" });
   } catch (error) {
     return next(error);
   }

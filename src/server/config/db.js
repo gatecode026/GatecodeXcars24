@@ -60,13 +60,22 @@ const sanitizeMongoUri = (uri) => {
   return uri;
 };
 
-export const connectDB = async (timeoutMs = 15000) => {
+export const connectDB = async (timeoutMs = 8000) => {
+  if (cached.conn && mongoose.connection.readyState === 1) {
+    return cached.conn;
+  }
   if (mongoose.connection.readyState === 1) {
     cached.conn = mongoose;
     return cached.conn;
   }
 
-  // Connection is not ready: reset cache to force fresh handshake
+  // If already connecting, await the existing connection promise rather than starting a duplicate
+  if (cached.promise && mongoose.connection.readyState === 2) {
+    try {
+      return await cached.promise;
+    } catch (_) {}
+  }
+
   cached.conn = null;
   cached.promise = null;
 
@@ -75,12 +84,12 @@ export const connectDB = async (timeoutMs = 15000) => {
 
   cached.promise = Promise.race([
     mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 10000,
-      connectTimeoutMS: 10000,
+      serverSelectionTimeoutMS: 6000,
+      connectTimeoutMS: 6000,
       maxPoolSize: 50,
       minPoolSize: 5,
       maxIdleTimeMS: 60000,
-      socketTimeoutMS: 45000,
+      socketTimeoutMS: 30000,
       family: 4
     }),
     new Promise((_, reject) =>
@@ -116,13 +125,13 @@ export const connectDB = async (timeoutMs = 15000) => {
 export const ensureDB = async () => {
   if (isDatabaseReady()) return true;
   try {
-    await connectDB(15000);
+    await connectDB(8000);
   } catch (err) {
     console.error("ensureDB primary connection attempt:", err?.message || err);
     if (!isDatabaseReady()) {
       try {
         dns.setServers(["1.1.1.1", "8.8.8.8"]);
-        await connectDB(15000);
+        await connectDB(8000);
       } catch (err2) {
         console.error("ensureDB fallback connection attempt:", err2?.message || err2);
       }

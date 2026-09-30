@@ -47,10 +47,10 @@ if (!fs.existsSync(uploadDir)) {
 export async function runHandler(request, params = {}, middlewares = [], controller) {
   try {
   try {
-    await connectDB(15000);  // give live environments up to 15s on cold start
+    await connectDB(8000);
     if (!global._adminSeeded) {
       global._adminSeeded = true;
-      await ensureFixedAdminUser();
+      ensureFixedAdminUser().catch((err) => console.warn("Admin seed warning:", err.message));
     }
   } catch (dbErr) {
     console.warn("DB connection warning in routeRunner:", dbErr.message);

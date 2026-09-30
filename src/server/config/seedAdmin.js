@@ -1,9 +1,9 @@
 import bcrypt from "bcryptjs";
 import { User } from "../models/User.js";
 
-const DEFAULT_ADMIN_EMAIL = "sales@rmaxiot.in";
-const DEFAULT_ADMIN_PASSWORD = "rmax@2026";
-const DEFAULT_ADMIN_NAME = "RMAX Admin";
+const DEFAULT_ADMIN_EMAIL = "surendraadmin@gmail.com";
+const DEFAULT_ADMIN_PASSWORD = "surendra";
+const DEFAULT_ADMIN_NAME = "Surendra Admin";
 
 export const ensureFixedAdminUser = async () => {
   // If an admin already exists in the database, preserve the active admin user!
