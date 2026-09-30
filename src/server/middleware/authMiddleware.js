@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 import { isDatabaseReady, ensureDB } from "../config/db.js";
 import { User } from "../models/User.js";
 
@@ -12,6 +13,7 @@ const debugLog = (msg) => {
 
 const getFixedAdminUser = () => ({
   id: "admin-fallback",
+  _id: "admin-fallback",
   name: process.env.ADMIN_NAME || "Surendra Admin",
   email: (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase(),
   role: "admin"
@@ -35,34 +37,47 @@ export const protect = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, getJwtSecret());
+    const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase();
 
-    const dbReady = await ensureDB();
-    if (!dbReady) {
-      if (decoded.role !== "admin") {
-        return res.status(401).json({ message: "Unauthorized. User not found." });
+    // 1. Admin/TL token handling (supports fallback ID and valid ObjectIds without CastError)
+    const isAdmin =
+      decoded.role === "admin" ||
+      decoded.role === "tl" ||
+      (decoded.email && decoded.email.toLowerCase() === adminEmail) ||
+      decoded.id === "admin-fallback";
+
+    if (isAdmin) {
+      if (decoded.id && decoded.id !== "admin-fallback" && mongoose.Types.ObjectId.isValid(decoded.id)) {
+        try {
+          const user = await User.findById(decoded.id).select("-password").lean();
+          if (user) {
+            user.role = "admin";
+            req.user = user;
+            return next();
+          }
+        } catch (_) {}
       }
       req.user = getFixedAdminUser();
       return next();
+    }
+
+    // 2. Regular employee lookup
+    const dbReady = await ensureDB();
+    if (!dbReady) {
+      return res.status(401).json({ message: "Unauthorized. User not found." });
+    }
+
+    if (!decoded.id || !mongoose.Types.ObjectId.isValid(decoded.id)) {
+      return res.status(401).json({ message: "Unauthorized. User not found." });
     }
 
     const user = await User.findById(decoded.id).select("-password").lean();
     if (user) {
-      // Only invalidate if user explicitly logged out (tokenVersion bumped after token creation)
       if (user.tokenVersion && decoded.tokenVersion && user.tokenVersion > decoded.tokenVersion + 1000) {
         return res.status(401).json({ message: "Session expired. You have been logged out." });
       }
 
-      const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase();
-      if (user.role === "admin" || user.email?.toLowerCase() === adminEmail) {
-        user.role = "admin";
-      }
       req.user = user;
-      return next();
-    }
-
-    const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase();
-    if (decoded.role === "admin" || (decoded.email && decoded.email.toLowerCase() === adminEmail)) {
-      req.user = getFixedAdminUser();
       return next();
     }
 

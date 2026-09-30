@@ -223,17 +223,17 @@ export const loginAdmin = async (req, res, next) => {
       const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase();
       const adminUser = getFixedAdminUser();
 
-      // Check DB in background or quick read to attach _id if available
       try {
-        if (isDatabaseReady()) {
-          const dbAdmin = await User.findOne({ email: adminEmail }).select("_id name email role tokenVersion").lean();
-          if (dbAdmin) {
-            return res.status(200).json({
-              message: "Login successful",
-              token: signToken({ id: dbAdmin._id, name: dbAdmin.name || adminUser.name, email: dbAdmin.email, role: "admin", tokenVersion: dbAdmin.tokenVersion ?? 0 }),
-              user: { id: dbAdmin._id, name: dbAdmin.name || adminUser.name, email: dbAdmin.email, role: "admin" }
-            });
-          }
+        await ensureDB();
+        const dbAdmin = await User.findOne({
+          $or: [{ email: adminEmail }, { role: "admin" }]
+        }).select("_id name email role tokenVersion").lean();
+        if (dbAdmin) {
+          return res.status(200).json({
+            message: "Login successful",
+            token: signToken({ id: dbAdmin._id, name: dbAdmin.name || adminUser.name, email: dbAdmin.email, role: "admin", tokenVersion: dbAdmin.tokenVersion ?? 0 }),
+            user: { id: dbAdmin._id, name: dbAdmin.name || adminUser.name, email: dbAdmin.email, role: "admin" }
+          });
         }
       } catch (_) {}
 
