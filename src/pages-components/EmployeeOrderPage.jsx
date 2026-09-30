@@ -780,7 +780,7 @@ const EmployeeOrderPage = () => {
           <div
             className="modal-card modal-lg"
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: "860px", width: "95%" }}
+            style={{ maxWidth: "860px", width: "95%", maxHeight: "92vh", display: "flex", flexDirection: "column" }}
           >
             <div className="modal-header">
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -805,8 +805,8 @@ const EmployeeOrderPage = () => {
               </button>
             </div>
 
-            <form onSubmit={onSubmit}>
-              <div className="modal-body modal-body-compact">
+            <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", overflow: "hidden", flex: 1 }}>
+              <div className="modal-body modal-body-compact" style={{ overflowY: "auto", maxHeight: "calc(90vh - 130px)", flex: 1, padding: "16px 20px" }}>
                 {/* 1. Customer Information */}
                 <div className="compact-section-box">
                   <div className="compact-section-title">

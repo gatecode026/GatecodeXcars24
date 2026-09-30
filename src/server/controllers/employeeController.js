@@ -104,10 +104,7 @@ export const getEmployeeDashboard = async (req, res, next) => {
       Order.find(dateFilter).select("numberOfUnits amount").lean(),
       CallingRecord.find({
         employeeId,
-        $or: [
-          { date: { $gte: start, $lte: end } },
-          { createdAt: { $gte: start, $lte: end } }
-        ]
+        date: { $gte: start, $lte: end }
       }).lean()
     ]);
 

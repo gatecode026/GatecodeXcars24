@@ -2142,7 +2142,8 @@ body.modal-open {
   flex-direction: column !important;
   gap: 10px !important;
   background: #ffffff !important;
-  overflow: visible !important;
+  overflow-y: auto !important;
+  max-height: calc(88vh - 120px) !important;
 }
 
 .compact-section-box {
