@@ -1,5 +1,6 @@
 import { ensureDB } from "../config/db.js";
 import { Order } from "../models/Order.js";
+import { recordActivity } from "./activityController.js";
 
 export const createOrder = async (req, res, next) => {
   try {
@@ -33,6 +34,22 @@ export const createOrder = async (req, res, next) => {
       payload.paymentScreenshot = `/uploads/${req.file.filename}`;
     }
     const order = await Order.create(payload);
+
+    const actorName = req.user?.name || (req.user?.role === "tl" ? "Team Leader" : "Executive");
+    const actorRole = req.user?.role || "employee";
+    recordActivity({
+      performedBy: req.user?._id || req.user?.id || null,
+      performedByName: actorName,
+      performedByRole: actorRole,
+      actionType: "ORDER_CREATED",
+      customerName: order.customerName,
+      title: "Car Purchase Order Registered",
+      details: `${actorName} booked car purchase order #${order._id.toString().slice(-6).toUpperCase()} for CX ${order.customerName} (₹${order.totalAmount || 0})`,
+      employeeMessage: `Booked car purchase order for CX ${order.customerName}`,
+      adminMessage: `${actorName} booked car purchase order for ${order.customerName} (₹${order.totalAmount || 0})`,
+      metadata: { orderId: order._id, totalAmount: order.totalAmount }
+    }).catch(() => {});
+
     return res.status(201).json({ message: "Order created successfully", data: order });
   } catch (error) {
     return next(error);
@@ -72,6 +89,22 @@ export const updateOrder = async (req, res, next) => {
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
+
+    const actorName = req.user?.name || (req.user?.role === "tl" ? "Team Leader" : "Executive");
+    const actorRole = req.user?.role || "employee";
+    recordActivity({
+      performedBy: req.user?._id || req.user?.id || null,
+      performedByName: actorName,
+      performedByRole: actorRole,
+      actionType: "ORDER_UPDATED",
+      customerName: order.customerName,
+      title: "Car Order Updated",
+      details: `${actorName} updated details for car order #${order._id.toString().slice(-6).toUpperCase()} (${order.customerName})`,
+      employeeMessage: `Car order details updated by ${actorName}`,
+      adminMessage: `${actorName} modified order #${order._id.toString().slice(-6).toUpperCase()}`,
+      metadata: { orderId: order._id }
+    }).catch(() => {});
+
     return res.status(200).json({ message: "Order updated successfully", data: order });
   } catch (error) {
     return next(error);
@@ -108,6 +141,22 @@ export const deleteOrder = async (req, res, next) => {
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
+
+    const actorName = req.user?.name || (req.user?.role === "tl" ? "Team Leader" : "Executive");
+    const actorRole = req.user?.role || "employee";
+    recordActivity({
+      performedBy: req.user?._id || req.user?.id || null,
+      performedByName: actorName,
+      performedByRole: actorRole,
+      actionType: "ORDER_DELETED",
+      customerName: order.customerName,
+      title: "Car Order Deleted",
+      details: `${actorName} deleted car order #${order._id.toString().slice(-6).toUpperCase()} (${order.customerName})`,
+      employeeMessage: `Order removed by ${actorName}`,
+      adminMessage: `${actorName} deleted order for ${order.customerName}`,
+      metadata: { orderId: order._id }
+    }).catch(() => {});
+
     return res.status(200).json({ message: "Order deleted successfully" });
   } catch (error) {
     return next(error);

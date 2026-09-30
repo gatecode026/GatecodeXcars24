@@ -57,7 +57,7 @@ export const getEmployeePerformance = async (req, res, next) => {
     const { start, end } = getDateRange(filter, startDate, endDate);
 
     const [employees, orderCounts, returnCounts] = await Promise.all([
-      User.find({ role: "employee" }, { name: 1, email: 1, username: 1 }).lean(),
+      User.find({ role: "employee", isDeleted: { $ne: true } }, { name: 1, email: 1, username: 1 }).lean(),
       Order.aggregate([
         { $match: { createdAt: { $gte: start, $lte: end } } },
         { $group: { _id: "$employeeId", count: { $sum: 1 } } }
@@ -275,7 +275,7 @@ export const getRevenueSummary = async (req, res, next) => {
 export const getEmployeeSummary = async (req, res, next) => {
   try {
     const { startDate, endDate } = req.query;
-    const employees = await User.find({ role: "employee" }).select("-password").lean();
+    const employees = await User.find({ role: "employee", isDeleted: { $ne: true } }).select("-password").lean();
     const orderFilter = buildDateFilter(startDate, endDate);
     const returnFilter = buildDateFilter(startDate, endDate);
     const callFilter = buildCallingDateFilter(startDate, endDate);

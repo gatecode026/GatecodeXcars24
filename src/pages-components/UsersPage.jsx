@@ -120,6 +120,8 @@ const UsersPage = () => {
 
   const filtered = users
     .filter((u) => {
+      // Never show deleted accounts
+      if (u.isDeleted) return false;
       // Never show administrator accounts in the employee list
       if (u.role === "admin") return false;
       // Never show the currently logged in user
@@ -153,7 +155,7 @@ const UsersPage = () => {
       alert("Critical Security Alert: You cannot delete your own active account.");
       return;
     }
-    if (!window.confirm(`Are you sure you want to delete user "${name}"? This action cannot be undone.`)) return;
+    if (!window.confirm(`Are you sure you want to delete employee "${name}"? The account will be deactivated and removed from the active table.`)) return;
     try {
       await api.delete(`/auth/users/${id}`);
       setUsers((prev) => prev.filter((u) => u._id !== id));
@@ -313,10 +315,10 @@ const UsersPage = () => {
                     </td>
                     <td>
                       <span
-                        className={`badge-verified-pill ${u.role === "admin" ? "verified" : "followup"}`}
-                        style={{ textTransform: "capitalize" }}
+                        className={`badge-verified-pill ${u.role === "admin" ? "verified" : (u.role === "tl" ? "completed" : "followup")}`}
+                        style={{ textTransform: "capitalize", fontWeight: 600 }}
                       >
-                        {u.role}
+                        {u.role === "tl" ? "Team Leader (TL)" : (u.role === "admin" ? "Administrator" : "Executive")}
                       </span>
                     </td>
                     <td>

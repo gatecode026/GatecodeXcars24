@@ -25,7 +25,13 @@ const ProtectedRoute = ({ children, role }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (role && user.role && user.role !== role) {
+  // Check role authorization: "admin" routes permit both admin and tl
+  const isAuthorized =
+    !role ||
+    user.role === role ||
+    (role === "admin" && (user.role === "admin" || user.role === "tl"));
+
+  if (!isAuthorized) {
     return <Navigate to={user.role === "employee" ? "/employee/dashboard" : "/admin/dashboard"} replace />;
   }
 

@@ -51,13 +51,18 @@ export const protect = async (req, res, next) => {
         try {
           const user = await User.findById(decoded.id).select("-password").lean();
           if (user) {
-            user.role = "admin";
+            user.role = user.role || decoded.role || "admin";
             req.user = user;
             return next();
           }
         } catch (_) {}
       }
-      req.user = getFixedAdminUser();
+      const fallbackUser = getFixedAdminUser();
+      if (decoded.role === "tl") {
+        fallbackUser.role = "tl";
+        fallbackUser.name = decoded.name || "Team Leader";
+      }
+      req.user = fallbackUser;
       return next();
     }
 
@@ -90,9 +95,13 @@ export const protect = async (req, res, next) => {
 export const adminOnly = (req, res, next) => {
   const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase();
 
-  // Primary check: if protect already resolved admin
+  // Primary check: if protect already resolved admin or tl
   if (req.user) {
-    if (req.user.role === "admin" || (req.user.email && req.user.email.toLowerCase() === adminEmail)) {
+    if (
+      req.user.role === "admin" ||
+      req.user.role === "tl" ||
+      (req.user.email && req.user.email.toLowerCase() === adminEmail)
+    ) {
       return next();
     }
   }
@@ -102,7 +111,11 @@ export const adminOnly = (req, res, next) => {
   if (token) {
     try {
       const decoded = jwt.verify(token, getJwtSecret());
-      if (decoded.role === "admin" || (decoded.email && decoded.email.toLowerCase() === adminEmail)) {
+      if (
+        decoded.role === "admin" ||
+        decoded.role === "tl" ||
+        (decoded.email && decoded.email.toLowerCase() === adminEmail)
+      ) {
         return next();
       }
     } catch (e) {
@@ -110,5 +123,5 @@ export const adminOnly = (req, res, next) => {
     }
   }
 
-  return res.status(403).json({ message: "Forbidden. Admin access required." });
+  return res.status(403).json({ message: "Forbidden. Admin or TL access required." });
 };

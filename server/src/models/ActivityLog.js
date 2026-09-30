@@ -7,7 +7,6 @@ const activityLogSchema = new mongoose.Schema(
     performedByRole: { type: String, default: "employee" },
     actionType: {
       type: String,
-      enum: ["LEAD_CREATED", "LEAD_UPDATED", "APPOINTMENT_SCHEDULED", "STATUS_CHANGED", "LEAD_DELETED"],
       required: true
     },
     targetCustomerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", default: null },

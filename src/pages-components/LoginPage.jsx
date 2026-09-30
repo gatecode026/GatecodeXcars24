@@ -74,7 +74,7 @@ const LoginPage = () => {
       const decoded = await login(trimmedEmail, trimmedPassword);
       const targetRole = decoded?.role || "employee";
       navigate(
-        targetRole === "admin" ? "/admin/dashboard" : "/employee/dashboard",
+        targetRole === "admin" || targetRole === "tl" ? "/admin/dashboard" : "/employee/dashboard",
         { replace: true }
       );
     } catch (err) {

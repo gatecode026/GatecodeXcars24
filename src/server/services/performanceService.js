@@ -521,7 +521,7 @@ export async function getEmployeeDailyHistory(employeeId, month, year) {
  * Returns sorted array with rank, tie-breakers applied.
  */
 export async function calculateEmployeeRankings(month, year) {
-  const employees = await User.find({ role: "employee" })
+  const employees = await User.find({ role: "employee", isDeleted: { $ne: true } })
     .select("name email _id createdAt")
     .lean();
 

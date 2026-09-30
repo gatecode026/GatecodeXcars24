@@ -28,21 +28,23 @@ export const ensureFixedAdminUser = async () => {
     console.log(`Fixed admin user ready: ${adminEmail}`);
   }
 
-  // Also ensure default employee account exists for demo quick-fill
-  const existingEmployee = await User.findOne({
-    $or: [{ username: "gatecode" }, { email: "employee@gatecode.in" }]
+  // Only real employees should exist - no synthetic demo executives
+
+  // Also ensure default TL account exists
+  const existingTL = await User.findOne({
+    $or: [{ username: "tl" }, { email: "tl@gatecode.in" }, { role: "tl" }]
   });
-  if (!existingEmployee) {
-    const hashedEmployeePassword = await bcrypt.hash("123456", 10);
+  if (!existingTL) {
+    const hashedTLPassword = await bcrypt.hash("123456", 10);
     await User.create({
-      name: "Demo Executive",
-      email: "employee@gatecode.in",
-      username: "gatecode",
-      password: hashedEmployeePassword,
-      phoneNumber: "9876543210",
-      role: "employee"
+      name: "Team Leader (TL)",
+      email: "tl@gatecode.in",
+      username: "tl",
+      password: hashedTLPassword,
+      phoneNumber: "9876543211",
+      role: "tl"
     });
-    console.log("Demo employee user ready: gatecode");
+    console.log("Default TL user ready: username 'tl' / password '123456' (tl@gatecode.in)");
   }
 };
 

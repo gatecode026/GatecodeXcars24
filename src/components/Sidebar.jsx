@@ -223,7 +223,7 @@ const Sidebar = () => {
             <div className="sidebar-user-avatar" suppressHydrationWarning>{userInitial}</div>
             <div className="sidebar-user-info">
               <p suppressHydrationWarning>{userName}</p>
-              <span>{user?.role === "admin" ? "Administrator" : "Operations"}</span>
+              <span>{user?.role === "admin" ? "Administrator" : (user?.role === "tl" ? "Team Leader" : "Operations")}</span>
             </div>
           </div>
           <button className="sidebar-logout-btn" onClick={handleLogout} title="Logout">

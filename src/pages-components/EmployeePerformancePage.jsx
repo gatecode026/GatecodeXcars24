@@ -244,7 +244,7 @@ export default function EmployeePerformancePage() {
                 Rank #{data.rank}
               </span>
               <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                of {data.totalEmployees || 2} Executives
+                of {data.totalEmployees || 1} {Number(data.totalEmployees) === 1 ? "Executive" : "Executives"}
               </span>
             </div>
           )}
@@ -476,7 +476,7 @@ export default function EmployeePerformancePage() {
                       Current Leaderboard Position
                     </div>
                     <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-heading)", marginTop: "2px" }}>
-                      Rank #{data?.rank || 1} among {data?.totalEmployees || 2} Sales Executives
+                      Rank #{data?.rank || 1} among {data?.totalEmployees || 1} Sales {Number(data?.totalEmployees) === 1 ? "Executive" : "Executives"}
                     </div>
                   </div>
                   <div

@@ -71,8 +71,9 @@ const LoginPage = () => {
       const trimmedPassword = password.trim();
 
       const decoded = await login(trimmedEmail, trimmedPassword);
+      const targetRole = decoded?.role || "employee";
       navigate(
-        decoded?.role === "admin" ? "/admin/dashboard" : "/employee/dashboard",
+        targetRole === "admin" || targetRole === "tl" ? "/admin/dashboard" : "/employee/dashboard",
         { replace: true }
       );
     } catch (err) {

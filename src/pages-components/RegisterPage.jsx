@@ -35,7 +35,7 @@ const ArrowLeftIcon = () => (
 const RegisterPage = () => {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
-  const isEdit = Boolean(id && searchParams.get("edit") === "true");
+  const isEdit = Boolean(id);
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
@@ -300,7 +300,8 @@ const RegisterPage = () => {
                     style={{ fontWeight: 600 }}
                   >
                     <option value="employee">Employee / Executive</option>
-                    <option value="admin">Administrator / TL</option>
+                    <option value="tl">Team Leader (TL)</option>
+                    <option value="admin">Administrator</option>
                   </select>
                 </div>
               </div>

@@ -142,7 +142,7 @@ export const getDashboardSummary = async (req, res, next) => {
           }
         }
       ]),
-      User.countDocuments({ role: "employee" }),
+      User.countDocuments({ role: "employee", isDeleted: { $ne: true } }),
       ReturnRequest.countDocuments(),
       Customer.find(customerFilter, {
         appointmentId: 1,

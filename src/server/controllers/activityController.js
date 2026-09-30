@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { ensureDB } from "../config/db.js";
 import { ActivityLog } from "../models/ActivityLog.js";
 
@@ -23,16 +24,20 @@ export const recordActivity = async ({
 }) => {
   try {
     if (!await ensureDB()) return null;
+    const safePerformedBy = (performedBy && mongoose.Types.ObjectId.isValid(performedBy)) ? performedBy : null;
+    const safeTargetCustomerId = (targetCustomerId && mongoose.Types.ObjectId.isValid(targetCustomerId)) ? targetCustomerId : null;
+    const safeAffectedEmployeeId = (affectedEmployeeId && mongoose.Types.ObjectId.isValid(affectedEmployeeId)) ? affectedEmployeeId : null;
+
     return await ActivityLog.create({
-      performedBy,
+      performedBy: safePerformedBy,
       performedByName: performedByName || "User",
       performedByRole: performedByRole || "employee",
       actionType,
-      targetCustomerId: targetCustomerId || null,
+      targetCustomerId: safeTargetCustomerId,
       appointmentId: appointmentId || "",
       customerName: customerName || "",
       carNumber: carNumber || "",
-      affectedEmployeeId: affectedEmployeeId || null,
+      affectedEmployeeId: safeAffectedEmployeeId,
       affectedEmployeeName: affectedEmployeeName || "",
       title,
       details,
@@ -73,7 +78,18 @@ export const getActivities = async (req, res, next) => {
     // Admin / TL sees all activities
 
     if (req.query.type && req.query.type !== "all") {
-      query.actionType = req.query.type;
+      const t = String(req.query.type).toLowerCase();
+      if (t === "employee") {
+        query.actionType = { $regex: "^EMPLOYEE", $options: "i" };
+      } else if (t === "order") {
+        query.actionType = { $regex: "^ORDER", $options: "i" };
+      } else if (t === "return") {
+        query.actionType = { $regex: "^RETURN", $options: "i" };
+      } else if (t === "lead") {
+        query.actionType = { $regex: "^(LEAD|APPOINTMENT|STATUS)", $options: "i" };
+      } else {
+        query.actionType = req.query.type;
+      }
     }
 
     const activities = await ActivityLog.find(query)

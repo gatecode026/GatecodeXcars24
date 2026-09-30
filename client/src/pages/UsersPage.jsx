@@ -79,6 +79,8 @@ const UsersPage = () => {
 
   const filtered = users
     .filter((u) => {
+      // Never show deleted accounts
+      if (u.isDeleted) return false;
       // Critical Security: Never show the currently logged in user (TL/Admin) in the subordinate employee list
       if (
         currentUser &&

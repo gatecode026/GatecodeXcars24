@@ -25,3 +25,7 @@ server/*.txt
 server/uploads/*
 !server/uploads/.gitkeep
 
+# temp scratch scripts
+scratch/
+
+

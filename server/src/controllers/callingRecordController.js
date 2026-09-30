@@ -157,7 +157,7 @@ export const bulkImportCallingRecords = async (req, res, next) => {
       return isNaN(parsed) ? 0 : parsed;
     };
 
-    const allUsers = await User.find({}, "_id name email").lean();
+    const allUsers = await User.find({ isDeleted: { $ne: true } }, "_id name email").lean();
     const userMap = new Map();
     allUsers.forEach((u) => {
       if (u.name) userMap.set(u.name.toLowerCase().trim(), u);

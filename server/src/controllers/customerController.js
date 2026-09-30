@@ -698,22 +698,16 @@ export const getEmployeesList = async (req, res, next) => {
     if (!dbReady) {
       
     }
-    const users = await User.find({}, "_id name email role")
+    const users = await User.find(
+      { isDeleted: { $ne: true }, role: { $in: ["employee", "tl"] } },
+      "_id name email role"
+    )
       .sort({ name: 1 })
       .lean();
-
-    const distinctLeadBy = await Customer.distinct("leadBy");
-    const distinctFollowUpBy = await Customer.distinct("followUpBy");
 
     const namesSet = new Set();
     users.forEach((u) => {
       if (u.name && u.name.trim()) namesSet.add(u.name.trim());
-    });
-    distinctLeadBy.forEach((n) => {
-      if (n && typeof n === "string" && n.trim()) namesSet.add(n.trim());
-    });
-    distinctFollowUpBy.forEach((n) => {
-      if (n && typeof n === "string" && n.trim()) namesSet.add(n.trim());
     });
 
     const sortedNames = Array.from(namesSet).sort((a, b) => a.localeCompare(b));

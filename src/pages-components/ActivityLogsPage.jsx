@@ -60,6 +60,12 @@ const ActivityLogsPage = () => {
 
   const getTypeBadgeClass = (actionType) => {
     switch (actionType) {
+      case "EMPLOYEE_CREATED":
+        return "badge-verified";
+      case "EMPLOYEE_UPDATED":
+        return "badge-followup";
+      case "EMPLOYEE_DELETED":
+        return "badge-rejected";
       case "LEAD_CREATED":
         return "badge-verified";
       case "APPOINTMENT_SCHEDULED":
@@ -67,6 +73,16 @@ const ActivityLogsPage = () => {
       case "STATUS_CHANGED":
         return "badge-completed";
       case "LEAD_DELETED":
+        return "badge-rejected";
+      case "ORDER_CREATED":
+        return "badge-completed";
+      case "ORDER_UPDATED":
+        return "badge-followup";
+      case "ORDER_DELETED":
+        return "badge-rejected";
+      case "RETURN_CREATED":
+      case "RETURN_UPDATED":
+      case "RETURN_DELETED":
         return "badge-rejected";
       default:
         return "badge-pending";
@@ -143,9 +159,8 @@ const ActivityLogsPage = () => {
               onChange={(e) => setTypeFilter(e.target.value)}
             >
               <option value="all">All Event Types</option>
-              <option value="lead">Leads</option>
-              <option value="appointment">Appointments</option>
-              <option value="verification">Verifications</option>
+              <option value="employee">Employee (Create / Edit / Delete)</option>
+              <option value="lead">Leads &amp; Appointments</option>
               <option value="order">Orders / Purchases</option>
               <option value="return">Returns / Issues</option>
             </select>
