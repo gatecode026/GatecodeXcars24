@@ -4,6 +4,14 @@ import { ReturnRequest } from "../models/ReturnRequest.js";
 import { User } from "../models/User.js";
 import { ensureDB } from "../config/db.js";
 
+// Micro-cache (5s) for instant tab switching and rapid dashboard refreshes
+const dashboardCache = new Map();
+const DASHBOARD_CACHE_TTL = 5000;
+
+export const invalidateDashboardCache = () => {
+  dashboardCache.clear();
+};
+
 export const getDashboardSummary = async (req, res, next) => {
   try {
     const dbReady = await ensureDB();
@@ -29,178 +37,167 @@ export const getDashboardSummary = async (req, res, next) => {
       });
     }
 
+    const userId = req.user?._id || req.user?.id || "guest";
+    const userRole = req.user?.role || "employee";
+    const cacheKey = userRole === "employee" ? `emp_${userId}` : "admin";
+
+    const cached = dashboardCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < DASHBOARD_CACHE_TTL) {
+      return res.status(200).json({ data: cached.data });
+    }
+
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-
-    // Filter scope for employee vs admin
-    const customerFilter = {};
-    if (req.user?.role === "employee") {
-      customerFilter.$or = [{ employeeId: req.user._id }, { assignedTo: req.user._id }];
-    }
-
-    const [
-      totalLeads,
-      todayLeads,
-      pendingFollowUps,
-      todayAppointments,
-      verifiedLeads,
-      carsPurchased,
-      carsSold,
-      activeEmployees,
-      totalReturns
-    ] = await Promise.all([
-      Customer.countDocuments(customerFilter),
-      Customer.countDocuments({
-        ...customerFilter,
-        createdAt: { $gte: startOfToday, $lte: endOfToday }
-      }),
-      Customer.countDocuments({
-        ...customerFilter,
-        $or: [
-          { leadStatus: "Follow-up" },
-          { followUp: "Follow-up" },
-          { verificationStatus: "Follow-up" }
-        ]
-      }),
-      Customer.countDocuments({
-        ...customerFilter,
-        appointmentDate: { $gte: startOfToday, $lte: endOfToday }
-      }),
-      Customer.countDocuments({
-        ...customerFilter,
-        $or: [{ verified: true }, { verificationStatus: "Verified" }]
-      }),
-      Order.countDocuments(),
-      Order.countDocuments({ orderStatus: "Delivered" }),
-      User.countDocuments({ role: "employee" }),
-      ReturnRequest.countDocuments()
-    ]);
-
-    // Calculate real 7-day trend from actual Customer collection
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
     sevenDaysAgo.setHours(0, 0, 0, 0);
 
-    let trendAggregation = await Customer.aggregate([
-      {
-        $match: {
-          ...customerFilter,
-          createdAt: { $gte: sevenDaysAgo }
+    // Filter scope for employee vs admin
+    const customerFilter = {};
+    if (userRole === "employee") {
+      customerFilter.$or = [{ employeeId: req.user._id }, { assignedTo: req.user._id }];
+    }
+
+    // Consolidated single roundtrip for all customer KPIs, 7-day trend, and top employees
+    const [customerFacetResult, orderStatsResult, activeEmployees, totalReturns, recentLeadsRaw] = await Promise.all([
+      Customer.aggregate([
+        { $match: customerFilter },
+        {
+          $facet: {
+            total: [{ $count: "count" }],
+            today: [
+              { $match: { createdAt: { $gte: startOfToday, $lte: endOfToday } } },
+              { $count: "count" }
+            ],
+            followUps: [
+              {
+                $match: {
+                  $or: [
+                    { leadStatus: "Follow-up" },
+                    { followUp: "Follow-up" },
+                    { verificationStatus: "Follow-up" }
+                  ]
+                }
+              },
+              { $count: "count" }
+            ],
+            todayAppointments: [
+              { $match: { appointmentDate: { $gte: startOfToday, $lte: endOfToday } } },
+              { $count: "count" }
+            ],
+            verified: [
+              { $match: { $or: [{ verified: true }, { verificationStatus: "Verified" }] } },
+              { $count: "count" }
+            ],
+            trend: [
+              { $match: { createdAt: { $gte: sevenDaysAgo } } },
+              {
+                $group: {
+                  _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                  leads: { $sum: 1 },
+                  verified: {
+                    $sum: {
+                      $cond: [{ $or: [{ $eq: ["$verified", true] }, { $eq: ["$verificationStatus", "Verified"] }] }, 1, 0]
+                    }
+                  }
+                }
+              },
+              { $sort: { _id: 1 } }
+            ],
+            topEmployees: [
+              {
+                $match: {
+                  $or: [
+                    { employeeName: { $exists: true, $ne: "" } },
+                    { leadBy: { $exists: true, $ne: "" } }
+                  ]
+                }
+              },
+              {
+                $group: {
+                  _id: { $ifNull: ["$leadBy", "$employeeName"] },
+                  totalLeads: { $sum: 1 },
+                  verifiedCount: {
+                    $sum: {
+                      $cond: [{ $or: [{ $eq: ["$verified", true] }, { $eq: ["$verificationStatus", "Verified"] }] }, 1, 0]
+                    }
+                  }
+                }
+              },
+              { $sort: { totalLeads: -1 } },
+              { $limit: 10 }
+            ]
+          }
         }
-      },
-      {
-        $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$createdAt" }
-          },
-          leads: { $sum: 1 },
-          verified: {
-            $sum: {
-              $cond: [{ $or: [{ $eq: ["$verified", true] }, { $eq: ["$verificationStatus", "Verified"] }] }, 1, 0]
+      ]),
+      Order.aggregate([
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            delivered: {
+              $sum: { $cond: [{ $eq: ["$orderStatus", "Delivered"] }, 1, 0] }
             }
           }
         }
-      },
-      { $sort: { _id: 1 } }
+      ]),
+      User.countDocuments({ role: "employee" }),
+      ReturnRequest.countDocuments(),
+      Customer.find(customerFilter, {
+        appointmentId: 1,
+        customerName: 1,
+        mobile: 1,
+        carNumber: 1,
+        leadBy: 1,
+        employeeName: 1,
+        verificationStatus: 1,
+        verified: 1,
+        leadStatus: 1,
+        followUp: 1,
+        appointmentDate: 1,
+        createdAt: 1
+      })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean()
     ]);
+
+    const f = customerFacetResult[0] || {};
+    const totalLeads = f.total?.[0]?.count || 0;
+    const todayLeads = f.today?.[0]?.count || 0;
+    const pendingFollowUps = f.followUps?.[0]?.count || 0;
+    const todayAppointments = f.todayAppointments?.[0]?.count || 0;
+    const verifiedLeads = f.verified?.[0]?.count || 0;
+
+    const o = orderStatsResult[0] || {};
+    const carsPurchased = o.total || 0;
+    const carsSold = o.delivered || 0;
+
+    // Build 7-day trend
+    const trendMap = {};
+    (f.trend || []).forEach((item) => {
+      trendMap[item._id] = { leads: item.leads, verified: item.verified };
+    });
 
     const performanceTrend = [];
     const daysArr = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-    if (trendAggregation.length > 0) {
-      const trendMap = {};
-      trendAggregation.forEach((item) => {
-        trendMap[item._id] = { leads: item.leads, verified: item.verified };
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().split("T")[0];
+      const dayName = daysArr[d.getDay()];
+      performanceTrend.push({
+        date: key,
+        day: dayName,
+        label: `${dayName} ${d.getDate()}`,
+        leads: trendMap[key]?.leads || 0,
+        verified: trendMap[key]?.verified || 0
       });
-
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        const key = d.toISOString().split("T")[0];
-        const dayName = daysArr[d.getDay()];
-        performanceTrend.push({
-          date: key,
-          day: dayName,
-          label: `${dayName} ${d.getDate()}`,
-          leads: trendMap[key]?.leads || 0,
-          verified: trendMap[key]?.verified || 0
-        });
-      }
-    } else {
-      // If no leads exist in the exact recent 7 calendar days, query the most recent active days
-      const recentDayAgg = await Customer.aggregate([
-        { $match: customerFilter },
-        {
-          $group: {
-            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-            leads: { $sum: 1 },
-            verified: {
-              $sum: {
-                $cond: [{ $or: [{ $eq: ["$verified", true] }, { $eq: ["$verificationStatus", "Verified"] }] }, 1, 0]
-              }
-            }
-          }
-        },
-        { $sort: { _id: -1 } },
-        { $limit: 7 }
-      ]);
-
-      const sortedAgg = recentDayAgg.reverse();
-      if (sortedAgg.length > 0) {
-        sortedAgg.forEach((item) => {
-          const d = new Date(item._id);
-          const dayName = isNaN(d.getTime()) ? item._id : daysArr[d.getDay()];
-          performanceTrend.push({
-            date: item._id,
-            day: dayName,
-            label: `${dayName} ${d.getDate() || ""}`,
-            leads: item.leads,
-            verified: item.verified
-          });
-        });
-      } else {
-        // Fallback default empty 7 days
-        for (let i = 6; i >= 0; i--) {
-          const d = new Date();
-          d.setDate(d.getDate() - i);
-          const dayName = daysArr[d.getDay()];
-          performanceTrend.push({
-            date: d.toISOString().split("T")[0],
-            day: dayName,
-            label: `${dayName} ${d.getDate()}`,
-            leads: 0,
-            verified: 0
-          });
-        }
-      }
     }
 
-    // Top Performing Employees (real aggregation from Customer collection)
-    const topEmployeesAggregation = await Customer.aggregate([
-      {
-        $match: {
-          $or: [
-            { employeeName: { $exists: true, $ne: "" } },
-            { leadBy: { $exists: true, $ne: "" } }
-          ]
-        }
-      },
-      {
-        $group: {
-          _id: { $ifNull: ["$leadBy", "$employeeName"] },
-          totalLeads: { $sum: 1 },
-          verifiedCount: {
-            $sum: {
-              $cond: [{ $or: [{ $eq: ["$verified", true] }, { $eq: ["$verificationStatus", "Verified"] }] }, 1, 0]
-            }
-          }
-        }
-      },
-      { $sort: { totalLeads: -1 } },
-    ]);
-
-    const topEmployees = topEmployeesAggregation.map((emp, index) => {
+    // Top Performing Employees
+    const topEmployees = (f.topEmployees || []).map((emp, index) => {
       const convRate = emp.totalLeads > 0 ? Math.round((emp.verifiedCount / emp.totalLeads) * 100) : 0;
       return {
         rank: index + 1,
@@ -213,11 +210,6 @@ export const getDashboardSummary = async (req, res, next) => {
     });
 
     // Recent 10 leads with automotive normalization
-    const recentLeadsRaw = await Customer.find(customerFilter)
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .lean();
-
     const recentLeads = recentLeadsRaw.map((c) => ({
       _id: c._id,
       appointmentId: c.appointmentId || `AP-${String(c._id).slice(-5).toUpperCase()}`,
@@ -231,30 +223,32 @@ export const getDashboardSummary = async (req, res, next) => {
       createdAt: c.createdAt
     }));
 
-    return res.status(200).json({
-      data: {
-        // Automotive KPIs
-        totalLeads,
-        todayLeads,
-        pendingFollowUps,
-        todayAppointments,
-        verifiedLeads,
-        carsPurchased,
-        carsSold,
-        activeEmployees,
+    const responseData = {
+      // Automotive KPIs
+      totalLeads,
+      todayLeads,
+      pendingFollowUps,
+      todayAppointments,
+      verifiedLeads,
+      carsPurchased,
+      carsSold,
+      activeEmployees,
 
-        // Legacy compatibility
-        totalOrders: carsPurchased,
-        pendingOrders: pendingFollowUps,
-        deliveredOrders: carsSold,
-        totalReturns,
+      // Legacy compatibility
+      totalOrders: carsPurchased,
+      pendingOrders: pendingFollowUps,
+      deliveredOrders: carsSold,
+      totalReturns,
 
-        // Real visualizations & tables
-        performanceTrend,
-        topEmployees,
-        recentLeads
-      }
-    });
+      // Visualizations & tables
+      performanceTrend,
+      topEmployees,
+      recentLeads
+    };
+
+    dashboardCache.set(cacheKey, { timestamp: Date.now(), data: responseData });
+
+    return res.status(200).json({ data: responseData });
   } catch (error) {
     return next(error);
   }

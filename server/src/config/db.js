@@ -26,10 +26,13 @@ export const connectDB = async (timeoutMs = 15000) => {
   const mongoUri = sanitizeMongoUri(rawUri);
   await Promise.race([
     mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 15000,
-      connectTimeoutMS: 15000,
-      maxPoolSize: 10,
-      socketTimeoutMS: 45000
+      serverSelectionTimeoutMS: 10000,
+      connectTimeoutMS: 10000,
+      maxPoolSize: 50,
+      minPoolSize: 5,
+      maxIdleTimeMS: 60000,
+      socketTimeoutMS: 45000,
+      family: 4
     }),
     new Promise((_, reject) =>
       setTimeout(() => reject(new Error("MongoDB connection timed out")), timeoutMs)

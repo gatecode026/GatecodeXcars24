@@ -151,13 +151,19 @@ export const getCustomers = async (req, res, next) => {
   try {
     const dbReady = await ensureDB();
     if (!dbReady) {
-      
+      return res.status(200).json({ data: [] });
     }
 
     const filter = buildCustomerFilter(req);
+    const limit = Math.min(parseInt(req.query.limit) || 500, 1000);
+    const skip = parseInt(req.query.skip) || 0;
+
     const customers = await Customer.find(filter)
+      .select("-__v")
       .populate("assignedTo", "name email")
       .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .lean();
 
     return res.status(200).json({ data: customers.map(normalizeCustomer) });

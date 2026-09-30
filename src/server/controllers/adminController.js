@@ -56,32 +56,35 @@ export const getEmployeePerformance = async (req, res, next) => {
     const { filter = "today", startDate, endDate } = req.query;
     const { start, end } = getDateRange(filter, startDate, endDate);
 
-    const employees = await User.find({ role: "employee" }, { name: 1, email: 1, username: 1 }).lean();
+    const [employees, orderCounts, returnCounts] = await Promise.all([
+      User.find({ role: "employee" }, { name: 1, email: 1, username: 1 }).lean(),
+      Order.aggregate([
+        { $match: { createdAt: { $gte: start, $lte: end } } },
+        { $group: { _id: "$employeeId", count: { $sum: 1 } } }
+      ]),
+      ReturnRequest.aggregate([
+        { $match: { createdAt: { $gte: start, $lte: end } } },
+        { $group: { _id: "$employeeId", count: { $sum: 1 } } }
+      ])
+    ]);
 
-    const performance = await Promise.all(
-      employees.map(async (emp) => {
-        const [ordersToday, returnsToday] = await Promise.all([
-          Order.countDocuments({
-            employeeId: emp._id,
-            createdAt: { $gte: start, $lte: end }
-          }),
-          ReturnRequest.countDocuments({
-            employeeId: emp._id,
-            createdAt: { $gte: start, $lte: end }
-          })
-        ]);
+    const orderMap = new Map(orderCounts.map((o) => [String(o._id), o.count]));
+    const returnMap = new Map(returnCounts.map((r) => [String(r._id), r.count]));
 
-        return {
-          _id: emp._id,
-          name: emp.name,
-          email: emp.email,
-          username: emp.username,
-          ordersToday,
-          returnsToday,
-          totalEntries: ordersToday + returnsToday
-        };
-      })
-    );
+    const performance = employees.map((emp) => {
+      const empIdStr = String(emp._id);
+      const ordersToday = orderMap.get(empIdStr) || 0;
+      const returnsToday = returnMap.get(empIdStr) || 0;
+      return {
+        _id: emp._id,
+        name: emp.name,
+        email: emp.email,
+        username: emp.username,
+        ordersToday,
+        returnsToday,
+        totalEntries: ordersToday + returnsToday
+      };
+    });
 
     return res.status(200).json({ data: performance });
   } catch (error) {
