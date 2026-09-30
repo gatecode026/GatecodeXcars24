@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import dns from "node:dns/promises";
 
 export const DEFAULT_MONGO_URI =
-  "mongodb+srv://gatecode026:tBNyNzO68BNn3Zkn@cluster0.1meot8l.mongodb.net/bpo-management";
+  "mongodb+srv://gatecode026:tBNyNzO68BNn3Zkn@cluster0.1meot8l.mongodb.net/gatecodecars24";
 
 export const isDatabaseReady = () => mongoose.connection.readyState === 1;
 

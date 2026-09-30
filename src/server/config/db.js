@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 export const DEFAULT_MONGO_URI =
-  "mongodb+srv://gatecode026:tBNyNzO68BNn3Zkn@cluster0.1meot8l.mongodb.net/bpo-management";
+  "mongodb+srv://gatecode026:tBNyNzO68BNn3Zkn@cluster0.1meot8l.mongodb.net/gatecodecars24";
 
 function loadEnvFallback() {
   if (process.env.MONGO_URI && process.env.JWT_SECRET) return;
