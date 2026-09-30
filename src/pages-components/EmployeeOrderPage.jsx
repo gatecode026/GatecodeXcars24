@@ -249,16 +249,30 @@ const EmployeeOrderPage = () => {
 
   const clearToast = useCallback(() => setToast(null), []);
 
-  const fetchRecent = useCallback(async () => {
+  const fetchRecent = useCallback(async (isBackground = false) => {
     try {
+      if (!isBackground) setLoading(true);
       const res = await api.get("/employee/orders");
       setRecentOrders(res.data?.data || []);
     } catch {
       // silent
+    } finally {
+      if (!isBackground) setLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchRecent(); }, [fetchRecent]);
+  useEffect(() => {
+    fetchRecent();
+    const interval = setInterval(() => {
+      fetchRecent(true);
+    }, 8000);
+    const onFocus = () => fetchRecent(true);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [fetchRecent]);
 
   useEffect(() => {
     if (isFormOpen) {
@@ -422,7 +436,12 @@ const EmployeeOrderPage = () => {
     <section className="form-page">
       <div className="form-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div>
-          <h2>Orders</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <h2 style={{ margin: 0 }}>Orders</h2>
+            <span className="badge-live-pulse">
+              <span className="badge-live-dot" /> Live
+            </span>
+          </div>
           <p className="form-subtitle">View and manage your order submissions</p>
         </div>
         <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
@@ -919,7 +938,20 @@ const EmployeeOrderPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredOrders.length === 0 ? (
+                {loading && recentOrders.length === 0 ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={`skel-${i}`}>
+                      <td><div className="skeleton-box" style={{ height: "14px", width: "80%" }} /></td>
+                      <td><div className="skeleton-box" style={{ height: "14px", width: "70%" }} /></td>
+                      <td><div className="skeleton-box" style={{ height: "14px", width: "60%" }} /></td>
+                      <td><div className="skeleton-box" style={{ height: "14px", width: "40%" }} /></td>
+                      <td><div className="skeleton-box" style={{ height: "14px", width: "65%" }} /></td>
+                      <td><div className="skeleton-box" style={{ height: "14px", width: "50%" }} /></td>
+                      <td><div className="skeleton-box" style={{ height: "14px", width: "60%" }} /></td>
+                      <td><div className="skeleton-box" style={{ height: "14px", width: "40%" }} /></td>
+                    </tr>
+                  ))
+                ) : filteredOrders.length === 0 ? (
                   <tr><td colSpan={8} style={{ textAlign: "center", color: "var(--text-muted)", padding: 24 }}>No matching orders</td></tr>
                 ) : (
                   filteredOrders.map((o) => (

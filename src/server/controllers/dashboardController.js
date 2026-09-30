@@ -2,6 +2,7 @@ import { Customer } from "../models/Customer.js";
 import { Order } from "../models/Order.js";
 import { ReturnRequest } from "../models/ReturnRequest.js";
 import { User } from "../models/User.js";
+import { CallingRecord } from "../models/CallingRecord.js";
 import { ensureDB } from "../config/db.js";
 
 // Micro-cache (5s) for instant tab switching and rapid dashboard refreshes
@@ -60,7 +61,7 @@ export const getDashboardSummary = async (req, res, next) => {
     }
 
     // Consolidated single roundtrip for all customer KPIs, 7-day trend, and top employees
-    const [customerFacetResult, orderStatsResult, activeEmployees, totalReturns, recentLeadsRaw] = await Promise.all([
+    const [customerFacetResult, orderStatsResult, activeEmployees, totalReturns, recentLeadsRaw, callingStatsResult] = await Promise.all([
       Customer.aggregate([
         { $match: customerFilter },
         {
@@ -160,7 +161,20 @@ export const getDashboardSummary = async (req, res, next) => {
       })
         .sort({ createdAt: -1 })
         .limit(10)
-        .lean()
+        .lean(),
+      CallingRecord.aggregate([
+        ...(userRole === "employee" ? [{ $match: { employeeId: req.user._id } }] : []),
+        {
+          $group: {
+            _id: null,
+            totalCalls: { $sum: { $add: ["$outgoingCalls", "$incomingCalls", "$followUpCalls"] } },
+            connectedCalls: { $sum: "$connectedCalls" },
+            conversionsDone: { $sum: "$conversionsDone" },
+            revenueGenerated: { $sum: "$revenueGenerated" },
+            count: { $sum: 1 }
+          }
+        }
+      ])
     ]);
 
     const f = customerFacetResult[0] || {};
@@ -239,6 +253,14 @@ export const getDashboardSummary = async (req, res, next) => {
       pendingOrders: pendingFollowUps,
       deliveredOrders: carsSold,
       totalReturns,
+
+      // Telecalling KPI stats
+      callingStats: {
+        totalCalls: callingStatsResult[0]?.totalCalls || 0,
+        connectedCalls: callingStatsResult[0]?.connectedCalls || 0,
+        conversionsDone: callingStatsResult[0]?.conversionsDone || 0,
+        revenueGenerated: callingStatsResult[0]?.revenueGenerated || 0
+      },
 
       // Visualizations & tables
       performanceTrend,

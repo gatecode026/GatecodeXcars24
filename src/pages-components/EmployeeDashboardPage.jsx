@@ -42,17 +42,37 @@ const FILTERS = [
   { key: "custom", label: "Date Range" },
 ];
 
+const PhoneCallIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+  </svg>
+);
+
+const TargetIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" />
+    <circle cx="12" cy="12" r="6" />
+    <circle cx="12" cy="12" r="2" />
+  </svg>
+);
+
 const EmployeeDashboardPage = () => {
   const { user } = useAuth();
-  const [stats, setStats] = useState({ orderCount: 0, returnCount: 0, totalIncentive: 0, leadCount: 0 });
+  const [stats, setStats] = useState({
+    orderCount: 0,
+    returnCount: 0,
+    totalIncentive: 0,
+    leadCount: 0,
+    callingStats: { totalCalls: 0, connectedCalls: 0, conversionsDone: 0, revenueGenerated: 0 }
+  });
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("today");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  const load = useCallback(async (f, sd, ed) => {
+  const load = useCallback(async (f, sd, ed, isBackground = false) => {
     try {
-      setLoading(true);
+      if (!isBackground) setLoading(true);
       const params = { filter: f };
       if (f === "custom") {
         if (sd) params.startDate = sd;
@@ -65,17 +85,33 @@ const EmployeeDashboardPage = () => {
         orderCount: dData.orderCount || 0,
         returnCount: dData.returnCount || 0,
         totalIncentive: dData.totalIncentive || 0,
-        leadCount: dData.leadCount || 0
+        leadCount: dData.leadCount || 0,
+        callingStats: dData.callingStats || { totalCalls: 0, connectedCalls: 0, conversionsDone: 0, revenueGenerated: 0 }
       });
     } catch {
-      setStats({ orderCount: 0, returnCount: 0, totalIncentive: 0, leadCount: 0 });
+      // keep previous state if background
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     load(filter, startDate, endDate);
+  }, [filter, startDate, endDate, load]);
+
+  // Real-time live background polling & focus synchronization
+  useEffect(() => {
+    const interval = setInterval(() => {
+      load(filter, startDate, endDate, true);
+    }, 8000);
+
+    const onFocus = () => load(filter, startDate, endDate, true);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [filter, startDate, endDate, load]);
 
   const handleFilterClick = (key) => {
@@ -92,7 +128,12 @@ const EmployeeDashboardPage = () => {
     <div className="content-area">
       <div className="page-header-row">
         <div className="page-title-box">
-          <h1>Executive Dashboard</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <h1 style={{ margin: 0 }}>Executive Dashboard</h1>
+            <span className="badge-live-pulse">
+              <span className="badge-live-dot" /> Live Data
+            </span>
+          </div>
           <p>Welcome back, <strong>{user?.name || "Executive"}</strong> • GatecodeXcars24 Operations</p>
         </div>
 
@@ -143,57 +184,100 @@ const EmployeeDashboardPage = () => {
         )}
       </div>
 
-      {/* 4 KPI Cards */}
+      {/* 6 KPI Cards Grid */}
       <div className="kpi-grid">
-        <div className="kpi-card">
-          <div className="kpi-top">
-            <div className="kpi-icon-wrap cyan">
-              <UsersIcon />
+        {loading && stats.leadCount === 0 ? (
+          Array.from({ length: 6 }).map((_, i) => (
+            <div key={`skel-card-${i}`} className="skeleton-card">
+              <div className="skeleton-box" style={{ height: "20px", width: "40%" }} />
+              <div className="skeleton-box" style={{ height: "36px", width: "60%" }} />
+              <div className="skeleton-box" style={{ height: "14px", width: "75%" }} />
             </div>
-            <span className="kpi-pill positive">Active</span>
-          </div>
-          <div className="kpi-label">Your Customer Leads</div>
-          <div className="kpi-value">{loading ? "..." : stats.leadCount}</div>
-          <div className="kpi-subtext">Total leads generated &amp; assigned</div>
-        </div>
+          ))
+        ) : (
+          <>
+            <div className="kpi-card">
+              <div className="kpi-top">
+                <div className="kpi-icon-wrap cyan">
+                  <UsersIcon />
+                </div>
+                <span className="kpi-pill positive">Active</span>
+              </div>
+              <div className="kpi-label">Your Customer Leads</div>
+              <div className="kpi-value">{stats.leadCount}</div>
+              <div className="kpi-subtext">Total leads generated &amp; assigned</div>
+            </div>
 
-        <div className="kpi-card">
-          <div className="kpi-top">
-            <div className="kpi-icon-wrap blue">
-              <CarIcon />
+            <div className="kpi-card">
+              <div className="kpi-top">
+                <div className="kpi-icon-wrap blue">
+                  <CarIcon />
+                </div>
+                <span className="kpi-pill info">Purchased</span>
+              </div>
+              <div className="kpi-label">Cars Processed</div>
+              <div className="kpi-value">{stats.orderCount}</div>
+              <div className="kpi-subtext">Vehicle purchases booked</div>
             </div>
-            <span className="kpi-pill info">Purchased</span>
-          </div>
-          <div className="kpi-label">Cars Processed</div>
-          <div className="kpi-value">{loading ? "..." : stats.orderCount}</div>
-          <div className="kpi-subtext">Vehicle purchases booked</div>
-        </div>
 
-        <div className="kpi-card">
-          <div className="kpi-top">
-            <div className="kpi-icon-wrap amber">
-              <RefreshIcon />
+            <div className="kpi-card">
+              <div className="kpi-top">
+                <div className="kpi-icon-wrap purple">
+                  <PhoneCallIcon />
+                </div>
+                <span className="kpi-pill info">Calls</span>
+              </div>
+              <div className="kpi-label">Calls Done / Connected</div>
+              <div className="kpi-value">
+                {stats.callingStats?.totalCalls || 0}
+                <span style={{ fontSize: "14px", fontWeight: 500, color: "var(--text-muted)", marginLeft: "6px" }}>
+                  ({stats.callingStats?.connectedCalls || 0} conn)
+                </span>
+              </div>
+              <div className="kpi-subtext">Total calls dialed &amp; engaged</div>
             </div>
-            <span className="kpi-pill warning">Returns</span>
-          </div>
-          <div className="kpi-label">Returns / Issues</div>
-          <div className="kpi-value">{loading ? "..." : stats.returnCount}</div>
-          <div className="kpi-subtext">Customer complaints or returns</div>
-        </div>
 
-        <div className="kpi-card">
-          <div className="kpi-top">
-            <div className="kpi-icon-wrap purple">
-              <RupeeIcon />
+            <div className="kpi-card">
+              <div className="kpi-top">
+                <div className="kpi-icon-wrap emerald">
+                  <TargetIcon />
+                </div>
+                <span className="kpi-pill positive">Deals</span>
+              </div>
+              <div className="kpi-label">Call Conversions</div>
+              <div className="kpi-value">{stats.callingStats?.conversionsDone || 0}</div>
+              <div className="kpi-subtext">Deals successfully closed via telecalling</div>
             </div>
-            <span className="kpi-pill positive">Earned</span>
-          </div>
-          <div className="kpi-label">Total Incentive</div>
-          <div className="kpi-value">
-            {loading ? "..." : `₹${Number(stats.totalIncentive || 0).toLocaleString("en-IN")}`}
-          </div>
-          <div className="kpi-subtext">Approved incentive payouts</div>
-        </div>
+
+            <div className="kpi-card">
+              <div className="kpi-top">
+                <div className="kpi-icon-wrap amber">
+                  <RefreshIcon />
+                </div>
+                <span className="kpi-pill warning">Returns</span>
+              </div>
+              <div className="kpi-label">Returns / Issues</div>
+              <div className="kpi-value">{stats.returnCount}</div>
+              <div className="kpi-subtext">Customer complaints or returns</div>
+            </div>
+
+            <div className="kpi-card">
+              <div className="kpi-top">
+                <div className="kpi-icon-wrap purple">
+                  <RupeeIcon />
+                </div>
+                <span className="kpi-pill positive">Earned</span>
+              </div>
+              <div className="kpi-label">Total Incentive</div>
+              <div className="kpi-value">
+                ₹{Number(stats.totalIncentive || 0).toLocaleString("en-IN")}
+              </div>
+              <div className="kpi-subtext">
+                Approved payout {stats.callingStats?.revenueGenerated > 0 ? `• ₹${stats.callingStats.revenueGenerated.toLocaleString("en-IN")} rev` : ""}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

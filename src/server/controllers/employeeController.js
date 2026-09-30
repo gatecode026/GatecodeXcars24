@@ -1,8 +1,10 @@
+import mongoose from "mongoose";
 import { ensureDB } from "../config/db.js";
 import { Order } from "../models/Order.js";
 import { ReturnRequest } from "../models/ReturnRequest.js";
 import { CallingRecord } from "../models/CallingRecord.js";
 import { Customer } from "../models/Customer.js";
+import { invalidateDashboardCache } from "./dashboardController.js";
 
 const startOfDay = () => {
   const d = new Date();
@@ -92,7 +94,11 @@ export const getEmployeeDashboard = async (req, res, next) => {
 
     const dateFilter = { employeeId, createdAt: { $gte: start, $lte: end } };
 
-    const [orderCount, returnCount, leadCount, recentOrders, recentReturns, allOrders] = await Promise.all([
+    const empObjId = mongoose.Types.ObjectId.isValid(employeeId)
+      ? new mongoose.Types.ObjectId(employeeId)
+      : employeeId;
+
+    const [orderCount, returnCount, leadCount, recentOrders, recentReturns, allOrders, callingAggregate] = await Promise.all([
       Order.countDocuments(dateFilter),
       ReturnRequest.countDocuments(dateFilter),
       Customer.countDocuments({
@@ -100,8 +106,27 @@ export const getEmployeeDashboard = async (req, res, next) => {
       }),
       Order.find(dateFilter).sort({ createdAt: -1 }).limit(5).lean(),
       ReturnRequest.find(dateFilter).sort({ createdAt: -1 }).limit(5).lean(),
-      Order.find(dateFilter).select("numberOfUnits amount").lean()
+      Order.find(dateFilter).select("numberOfUnits amount").lean(),
+      CallingRecord.aggregate([
+        {
+          $match: {
+            employeeId: empObjId,
+            date: { $gte: start, $lte: end }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            totalCalls: { $sum: { $add: ["$outgoingCalls", "$incomingCalls", "$followUpCalls"] } },
+            connectedCalls: { $sum: "$connectedCalls" },
+            conversionsDone: { $sum: "$conversionsDone" },
+            revenueGenerated: { $sum: "$revenueGenerated" }
+          }
+        }
+      ])
     ]);
+
+    const callStats = callingAggregate[0] || {};
 
     const totalIncentive = allOrders.reduce((sum, o) => {
       const units = Number(o.numberOfUnits || 0);
@@ -123,6 +148,12 @@ export const getEmployeeDashboard = async (req, res, next) => {
         returnCount,
         leadCount,
         totalIncentive: Math.round(totalIncentive),
+        callingStats: {
+          totalCalls: callStats.totalCalls || 0,
+          connectedCalls: callStats.connectedCalls || 0,
+          conversionsDone: callStats.conversionsDone || 0,
+          revenueGenerated: callStats.revenueGenerated || 0
+        },
         recentOrders,
         recentReturns
       }
@@ -279,34 +310,65 @@ export const getEmployeeCallingRecords = async (req, res, next) => {
 
 export const createEmployeeCallingRecord = async (req, res, next) => {
   try {
+    if (!await ensureDB()) {
+      return res.status(503).json({ message: "Database temporarily unavailable" });
+    }
     const employeeId = getEmployeeId(req);
     const employeeName = getEmployeeName(req);
     if (!employeeId) {
       return res.status(401).json({ message: "Employee context not found" });
     }
 
-    const {
+    let {
       date, outgoingCalls, incomingCalls, connectedCalls,
       notConnectedCalls, interestedLeads, notInterestedLeads,
       followUpCalls, followUpLeads, conversionsDone, revenueGenerated
     } = req.body;
 
+    const outCalls = Math.max(0, Number(outgoingCalls) || 0);
+    const inCalls = Math.max(0, Number(incomingCalls) || 0);
+    const fCalls = Math.max(0, Number(followUpCalls) || 0);
+    const totalCalls = outCalls + inCalls + fCalls;
+
+    let connCalls = Math.max(0, Number(connectedCalls) || 0);
+    if (connCalls > totalCalls) connCalls = totalCalls;
+
+    const notConn = Math.max(0, totalCalls - connCalls);
+
+    let intLeads = Math.max(0, Number(interestedLeads) || 0);
+    let notIntLeads = Math.max(0, Number(notInterestedLeads) || 0);
+    let fLeads = Math.max(0, Number(followUpLeads) || 0);
+
+    // Sum of leads cannot exceed connected calls
+    if (intLeads + notIntLeads + fLeads > connCalls && connCalls > 0) {
+      if (intLeads > connCalls) intLeads = connCalls;
+      if (intLeads + notIntLeads > connCalls) notIntLeads = Math.max(0, connCalls - intLeads);
+      if (intLeads + notIntLeads + fLeads > connCalls) fLeads = Math.max(0, connCalls - intLeads - notIntLeads);
+    }
+
+    let conv = Math.max(0, Number(conversionsDone) || 0);
+    if (conv > intLeads) conv = intLeads;
+
+    const rev = Math.max(0, Number(revenueGenerated) || 0);
+
     const record = await CallingRecord.create({
       employeeId,
       employeeName,
-      date: date || new Date(),
-      outgoingCalls: outgoingCalls || 0,
-      incomingCalls: incomingCalls || 0,
-      connectedCalls: connectedCalls || 0,
-      notConnectedCalls: notConnectedCalls || 0,
-      interestedLeads: interestedLeads || 0,
-      notInterestedLeads: notInterestedLeads || 0,
-      followUpCalls: followUpCalls || 0,
-      followUpLeads: followUpLeads || 0,
-      conversionsDone: conversionsDone || 0,
-      revenueGenerated: revenueGenerated || 0,
+      date: date ? new Date(date) : new Date(),
+      outgoingCalls: outCalls,
+      incomingCalls: inCalls,
+      connectedCalls: connCalls,
+      notConnectedCalls: notConn,
+      interestedLeads: intLeads,
+      notInterestedLeads: notIntLeads,
+      followUpCalls: fCalls,
+      followUpLeads: fLeads,
+      conversionsDone: conv,
+      revenueGenerated: rev,
       createdBy: employeeId
     });
+
+    invalidateDashboardCache();
 
     return res.status(201).json({
       message: "Calling record created successfully",
@@ -319,6 +381,9 @@ export const createEmployeeCallingRecord = async (req, res, next) => {
 
 export const deleteEmployeeCallingRecord = async (req, res, next) => {
   try {
+    if (!await ensureDB()) {
+      return res.status(503).json({ message: "Database temporarily unavailable" });
+    }
     const employeeId = getEmployeeId(req);
     if (!employeeId) {
       return res.status(401).json({ message: "Employee context not found" });
@@ -327,6 +392,7 @@ export const deleteEmployeeCallingRecord = async (req, res, next) => {
     if (!record) {
       return res.status(404).json({ message: "Calling record not found or unauthorized" });
     }
+    invalidateDashboardCache();
     return res.status(200).json({ message: "Calling record deleted successfully" });
   } catch (error) {
     return next(error);
@@ -335,6 +401,9 @@ export const deleteEmployeeCallingRecord = async (req, res, next) => {
 
 export const updateEmployeeCallingRecord = async (req, res, next) => {
   try {
+    if (!await ensureDB()) {
+      return res.status(503).json({ message: "Database temporarily unavailable" });
+    }
     const employeeId = getEmployeeId(req);
     if (!employeeId) {
       return res.status(401).json({ message: "Employee context not found" });
@@ -357,7 +426,15 @@ export const updateEmployeeCallingRecord = async (req, res, next) => {
       }
     });
 
+    // Sanitize calculations on update
+    const totalCalls = (Number(record.outgoingCalls) || 0) + (Number(record.incomingCalls) || 0) + (Number(record.followUpCalls) || 0);
+    if (record.connectedCalls > totalCalls) record.connectedCalls = totalCalls;
+    record.notConnectedCalls = Math.max(0, totalCalls - record.connectedCalls);
+    if (record.conversionsDone > record.interestedLeads) record.conversionsDone = record.interestedLeads;
+
     await record.save();
+    invalidateDashboardCache();
+
     return res.status(200).json({
       message: "Calling record updated successfully",
       data: record

@@ -280,6 +280,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
     appointmentDate: "",
     leadDate: new Date().toISOString().split("T")[0],
     verificationStatus: "Pending",
+    followUp: "Follow-up",
     leadBy: user?.name || "",
     followUpBy: "",
     followUpDate: "",
@@ -452,6 +453,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
       appointmentDate: lead.appointmentDate ? new Date(lead.appointmentDate).toISOString().slice(0, 16) : "",
       leadDate: lead.leadDate ? new Date(lead.leadDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
       verificationStatus: lead.verificationStatus || (lead.verified ? "Verified" : "Pending"),
+      followUp: lead.followUp || (lead.leadStatus === "Completed" ? "Converted" : "Follow-up"),
       leadBy: lead.leadBy || lead.employeeName || "",
       followUpBy: lead.followUpBy || "",
       followUpDate: lead.followUpDate ? new Date(lead.followUpDate).toISOString().split("T")[0] : "",
@@ -469,7 +471,9 @@ const CustomersPage = ({ defaultTab = "all" }) => {
       const payload = {
         ...formData,
         odometerKm: Number(formData.odometerKm) || 0,
-        verified: formData.verificationStatus === "Verified"
+        verified: formData.verificationStatus === "Verified",
+        followUp: formData.followUp || "Follow-up",
+        leadStatus: formData.followUp === "Converted" ? "Completed" : (formData.verificationStatus === "Verified" ? "Verified" : "Follow-up")
       };
 
       if (editLead) {
@@ -1073,7 +1077,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">Verified</label>
+                      <label className="form-label">LEAD VERIFIED</label>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px", height: "35px" }}>
                         <label
                           className="yn-switch yn-switch-lg"
@@ -1207,14 +1211,14 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">VERIFIED</label>
+                      <label className="form-label">DEAL / CONVERTED</label>
                       <div style={{ display: "flex", alignItems: "center", gap: "10px", paddingTop: "4px" }}>
-                        <label className="yn-switch yn-switch-lg">
+                        <label className="yn-switch yn-switch-lg" title="Toggle Lead Converted vs Follow-up Required">
                           <input
                             type="checkbox"
-                            checked={formData.verificationStatus === "Verified"}
+                            checked={formData.followUp === "Converted"}
                             onChange={(e) =>
-                              setFormData({ ...formData, verificationStatus: e.target.checked ? "Verified" : "Pending" })
+                              setFormData({ ...formData, followUp: e.target.checked ? "Converted" : "Follow-up" })
                             }
                           />
                           <span className="yn-slider">
@@ -1222,8 +1226,8 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                             <span className="yn-label-no">No</span>
                           </span>
                         </label>
-                        <span style={{ fontSize: "12.5px", fontWeight: 600, color: formData.verificationStatus === "Verified" ? "#16a34a" : "var(--text-muted)" }}>
-                          {formData.verificationStatus === "Verified" ? "✓ Verified" : "✗ Not Verified"}
+                        <span style={{ fontSize: "12.5px", fontWeight: 700, color: formData.followUp === "Converted" ? "#0284c7" : "#64748b" }}>
+                          {formData.followUp === "Converted" ? "✓ Converted" : "⏳ Follow-up"}
                         </span>
                       </div>
                     </div>
