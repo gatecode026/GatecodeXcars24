@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import "@/src/styles/index.css";
 import { AuthProvider } from "@/src/context/AuthContext";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata = {
   title: "GatecodeXcars24 — Used-Car CRM & Operations Platform",
@@ -32,6 +33,7 @@ export default function RootLayout({ children }) {
             {children}
           </Suspense>
         </AuthProvider>
+        <SpeedInsights />
       </body>
     </html>
   );
