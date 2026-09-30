@@ -46,7 +46,10 @@ const ReturnPage = () => {
     return Object.keys(next).length === 0;
   };
 
-  const onChange = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+  const onChange = (key, value) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    if (errors[key]) setErrors((prev) => ({ ...prev, [key]: undefined }));
+  };
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -57,7 +60,19 @@ const ReturnPage = () => {
       await api.post("/returns", { ...form, numberOfUnitsReturning: Number(form.numberOfUnitsReturning) });
       navigate("/admin/returns/manage", { replace: true });
     } catch (error) {
-      setMessage(error.response?.data?.message || "Failed to submit return request");
+      const errMsg = error.response?.data?.message || "Failed to submit return request";
+      setMessage(errMsg);
+      const fieldErrors = error.response?.data?.errors || {};
+      if (Object.keys(fieldErrors).length) {
+        setErrors(fieldErrors);
+      } else {
+        const lower = errMsg.toLowerCase();
+        if (lower.includes("mobile")) setErrors((prev) => ({ ...prev, mobileNumber: errMsg }));
+        else if (lower.includes("customer")) setErrors((prev) => ({ ...prev, customerName: errMsg }));
+        else if (lower.includes("pincode")) setErrors((prev) => ({ ...prev, pincode: errMsg }));
+        else if (lower.includes("unit")) setErrors((prev) => ({ ...prev, numberOfUnitsReturning: errMsg }));
+        else if (lower.includes("reason")) setErrors((prev) => ({ ...prev, customReason: errMsg }));
+      }
     } finally {
       setLoading(false);
     }
@@ -73,12 +88,13 @@ const ReturnPage = () => {
       </div>
 
       <div className="form-card glass-card">
-        <form className="modern-form" onSubmit={onSubmit}>
+        <form className="modern-form" onSubmit={onSubmit} noValidate>
           <div className="form-section">
             <h3 className="form-section-title">Customer Information</h3>
             <div className="form-section-content">
               <Field label="Customer Name" error={errors.customerName}>
                 <input
+                  className={errors.customerName ? "is-invalid" : ""}
                   placeholder="Enter customer name"
                   value={form.customerName}
                   onChange={(e) => onChange("customerName", sanitizeLetters(e.target.value))}
@@ -86,6 +102,7 @@ const ReturnPage = () => {
               </Field>
               <Field label="Mobile Number" error={errors.mobileNumber}>
                 <input
+                  className={errors.mobileNumber ? "is-invalid" : ""}
                   placeholder="10-digit number"
                   inputMode="numeric"
                   maxLength={10}
@@ -96,6 +113,7 @@ const ReturnPage = () => {
               </Field>
               <Field label="Pincode" error={errors.pincode}>
                 <input
+                  className={errors.pincode ? "is-invalid" : ""}
                   placeholder="6-digit pincode"
                   inputMode="numeric"
                   maxLength={6}
@@ -120,6 +138,7 @@ const ReturnPage = () => {
               </Field>
               <Field label="Number of Units" error={errors.numberOfUnitsReturning}>
                 <input
+                  className={errors.numberOfUnitsReturning ? "is-invalid" : ""}
                   placeholder="How many units?"
                   value={form.numberOfUnitsReturning}
                   onKeyDown={preventNonNumericKey}
@@ -138,6 +157,7 @@ const ReturnPage = () => {
               {form.returnReason === "Other" && (
                 <Field label="Custom Reason" error={errors.customReason}>
                   <input
+                    className={errors.customReason ? "is-invalid" : ""}
                     placeholder="Describe the reason"
                     value={form.customReason}
                     onChange={(e) => onChange("customReason", e.target.value)}

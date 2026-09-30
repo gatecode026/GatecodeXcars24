@@ -385,9 +385,20 @@ const EmployeeReturnPage = () => {
       setEditingId(null);
       setErrors({});
       setIsFormOpen(false);
-      fetchRecent(true);
     } catch (error) {
-      setToast(error.response?.data?.message || "Failed to submit return request");
+      const errMsg = error.response?.data?.message || "Failed to submit return request";
+      setToast(errMsg);
+      const fieldErrors = error.response?.data?.errors || {};
+      if (Object.keys(fieldErrors).length) {
+        setErrors(fieldErrors);
+      } else {
+        const lower = errMsg.toLowerCase();
+        if (lower.includes("mobile")) setErrors((prev) => ({ ...prev, mobileNumber: errMsg }));
+        else if (lower.includes("customer")) setErrors((prev) => ({ ...prev, customerName: errMsg }));
+        else if (lower.includes("pincode")) setErrors((prev) => ({ ...prev, pincode: errMsg }));
+        else if (lower.includes("unit")) setErrors((prev) => ({ ...prev, numberOfUnitsReturning: errMsg }));
+        else if (lower.includes("reason")) setErrors((prev) => ({ ...prev, customReason: errMsg }));
+      }
     } finally {
       setLoading(false);
     }
@@ -697,7 +708,7 @@ const EmployeeReturnPage = () => {
               </button>
             </div>
 
-            <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", overflow: "hidden", flex: 1 }}>
+            <form onSubmit={onSubmit} noValidate style={{ display: "flex", flexDirection: "column", overflow: "hidden", flex: 1 }}>
               <div className="modal-body modal-body-compact" style={{ overflowY: "auto", maxHeight: "calc(90vh - 130px)", flex: 1, padding: "16px 20px" }}>
                 {/* 1. Customer Information */}
                 <div className="compact-section-box">
@@ -713,20 +724,20 @@ const EmployeeReturnPage = () => {
                       <label className="form-label">Customer Name *</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${errors.customerName ? "is-invalid" : ""}`}
                         placeholder="Enter customer name"
                         required
                         value={form.customerName}
                         onChange={(e) => onChange("customerName", sanitizeLetters(e.target.value))}
                       />
-                      {errors.customerName && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.customerName}</small>}
+                      {errors.customerName && <small className="error-text">{errors.customerName}</small>}
                     </div>
 
                     <div className="form-group">
                       <label className="form-label">Mobile Number *</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${errors.mobileNumber ? "is-invalid" : ""}`}
                         placeholder="10-digit number"
                         inputMode="numeric"
                         maxLength={10}
@@ -735,14 +746,14 @@ const EmployeeReturnPage = () => {
                         onKeyDown={preventNonNumericKey}
                         onChange={(e) => onChange("mobileNumber", sanitizeDigits(e.target.value, 10))}
                       />
-                      {errors.mobileNumber && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.mobileNumber}</small>}
+                      {errors.mobileNumber && <small className="error-text">{errors.mobileNumber}</small>}
                     </div>
 
                     <div className="form-group">
                       <label className="form-label">Pincode *</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${errors.pincode ? "is-invalid" : ""}`}
                         placeholder="6-digit pincode"
                         inputMode="numeric"
                         maxLength={6}
@@ -751,7 +762,7 @@ const EmployeeReturnPage = () => {
                         onKeyDown={preventNonNumericKey}
                         onChange={(e) => onChange("pincode", sanitizeDigits(e.target.value, 6))}
                       />
-                      {errors.pincode && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.pincode}</small>}
+                      {errors.pincode && <small className="error-text">{errors.pincode}</small>}
                     </div>
                   </div>
                 </div>
@@ -783,7 +794,7 @@ const EmployeeReturnPage = () => {
                       <label className="form-label">Number of Units *</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${errors.numberOfUnitsReturning ? "is-invalid" : ""}`}
                         placeholder="e.g. 1"
                         inputMode="numeric"
                         required
@@ -791,7 +802,7 @@ const EmployeeReturnPage = () => {
                         onKeyDown={preventNonNumericKey}
                         onChange={(e) => onChange("numberOfUnitsReturning", sanitizeDigits(e.target.value, 6))}
                       />
-                      {errors.numberOfUnitsReturning && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.numberOfUnitsReturning}</small>}
+                      {errors.numberOfUnitsReturning && <small className="error-text">{errors.numberOfUnitsReturning}</small>}
                     </div>
 
                     <div className="form-group">
@@ -814,12 +825,12 @@ const EmployeeReturnPage = () => {
                         <label className="form-label">Custom Reason *</label>
                         <input
                           type="text"
-                          className="form-control"
+                          className={`form-control ${errors.customReason ? "is-invalid" : ""}`}
                           placeholder="Describe specific reason"
                           value={form.customReason}
                           onChange={(e) => onChange("customReason", e.target.value)}
                         />
-                        {errors.customReason && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.customReason}</small>}
+                        {errors.customReason && <small className="error-text">{errors.customReason}</small>}
                       </div>
                     )}
                   </div>

@@ -288,6 +288,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
     state: "",
     remark: ""
   });
+  const [formErrors, setFormErrors] = useState({});
 
   // Server-side filter state
   const [dateType, setDateType] = useState("createdAt");
@@ -439,11 +440,13 @@ const CustomersPage = ({ defaultTab = "all" }) => {
       state: "",
       remark: ""
     });
+    setFormErrors({});
     setShowAddModal(true);
   };
 
   const handleOpenEditModal = (lead) => {
     setEditLead(lead);
+    setFormErrors({});
     setFormData({
       customerName: lead.customerName || "",
       mobile: lead.mobile || "",
@@ -463,9 +466,26 @@ const CustomersPage = ({ defaultTab = "all" }) => {
     });
   };
 
+  const validateLead = () => {
+    const errs = {};
+    if (!formData.customerName || !formData.customerName.trim()) {
+      errs.customerName = "Customer name is required";
+    }
+    if (!formData.mobile || !formData.mobile.trim()) {
+      errs.mobile = "Mobile number is required";
+    } else {
+      const clean = formData.mobile.replace(/\D/g, "");
+      if (clean.length < 10) {
+        errs.mobile = "Enter valid 10-digit mobile number";
+      }
+    }
+    setFormErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
   const handleSaveLead = async (e) => {
     e.preventDefault();
-    if (!formData.customerName || !formData.mobile) return;
+    if (!validateLead()) return;
     setSubmitting(true);
     try {
       const payload = {
@@ -487,7 +507,13 @@ const CustomersPage = ({ defaultTab = "all" }) => {
       }
       fetchLeads();
     } catch (err) {
-      setToast({ message: err.response?.data?.message || "Failed to save lead", type: "error" });
+      const msg = err.response?.data?.message || "Failed to save lead";
+      setToast({ message: msg, type: "error" });
+      if (msg.toLowerCase().includes("mobile")) {
+        setFormErrors((prev) => ({ ...prev, mobile: msg }));
+      } else if (msg.toLowerCase().includes("name") || msg.toLowerCase().includes("customer")) {
+        setFormErrors((prev) => ({ ...prev, customerName: msg }));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -992,7 +1018,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
               </button>
             </div>
 
-            <form onSubmit={handleSaveLead}>
+            <form onSubmit={handleSaveLead} noValidate>
               <div className="modal-body modal-body-compact">
                 {/* 1. Customer & Vehicle Details (Row 1) */}
                 <div className="compact-section-box">
@@ -1034,24 +1060,36 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                       <label className="form-label">CX Name (Customer Name) *</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${formErrors.customerName ? "is-invalid" : ""}`}
                         placeholder="e.g. Ramesh Patel"
                         required
                         value={formData.customerName}
-                        onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
+                        onChange={(e) => {
+                          setFormData({ ...formData, customerName: e.target.value });
+                          if (formErrors.customerName) setFormErrors((prev) => ({ ...prev, customerName: "" }));
+                        }}
                       />
+                      {formErrors.customerName && (
+                        <small className="error-text">{formErrors.customerName}</small>
+                      )}
                     </div>
 
                     <div className="form-group">
                       <label className="form-label">Cx Mobile No. *</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${formErrors.mobile ? "is-invalid" : ""}`}
                         placeholder="e.g. 9876543210"
                         required
                         value={formData.mobile}
-                        onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
+                        onChange={(e) => {
+                          setFormData({ ...formData, mobile: e.target.value });
+                          if (formErrors.mobile) setFormErrors((prev) => ({ ...prev, mobile: "" }));
+                        }}
                       />
+                      {formErrors.mobile && (
+                        <small className="error-text">{formErrors.mobile}</small>
+                      )}
                     </div>
 
                     <div className="form-group">

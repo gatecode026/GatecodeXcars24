@@ -61,6 +61,7 @@ const AdminProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
+  const [errors, setErrors] = useState({});
 
   // Profile fields
   const [name, setName] = useState("");
@@ -107,30 +108,34 @@ const AdminProfilePage = () => {
     e.preventDefault();
     setToast(null);
 
+    const errs = {};
     if (!name.trim()) {
-      setToast({ type: "error", message: "Full Name cannot be empty." });
-      return;
+      errs.name = "Full Name cannot be empty.";
     }
 
     if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
-      setToast({ type: "error", message: "Please enter a valid email address." });
-      return;
+      errs.email = "Please enter a valid email address.";
     }
 
     if (newPassword || confirmPassword) {
       if (!currentPassword) {
-        setToast({ type: "error", message: "Please enter your Current Password to verify the password change." });
-        return;
+        errs.currentPassword = "Please enter your Current Password to verify the password change.";
       }
       if (newPassword.length < 6) {
-        setToast({ type: "error", message: "New Password must be at least 6 characters long." });
-        return;
+        errs.newPassword = "New Password must be at least 6 characters long.";
       }
       if (newPassword !== confirmPassword) {
-        setToast({ type: "error", message: "New Password and Confirm Password do not match." });
-        return;
+        errs.confirmPassword = "New Password and Confirm Password do not match.";
       }
     }
+
+    if (Object.keys(errs).length) {
+      setErrors(errs);
+      setToast({ type: "error", message: Object.values(errs)[0] });
+      return;
+    }
+
+    setErrors({});
 
     try {
       setSubmitting(true);
@@ -172,6 +177,11 @@ const AdminProfilePage = () => {
     } catch (err) {
       const msg = err.response?.data?.message || err.message || "Failed to update profile. Please try again.";
       setToast({ type: "error", message: msg });
+      const lower = msg.toLowerCase();
+      if (lower.includes("current password") || lower.includes("old password")) setErrors((p) => ({ ...p, currentPassword: msg }));
+      else if (lower.includes("email")) setErrors((p) => ({ ...p, email: msg }));
+      else if (lower.includes("name")) setErrors((p) => ({ ...p, name: msg }));
+      else if (lower.includes("password")) setErrors((p) => ({ ...p, newPassword: msg }));
     } finally {
       setSubmitting(false);
     }
@@ -299,7 +309,7 @@ const AdminProfilePage = () => {
 
           {/* Right Column: Edit Profile Form & Change Password */}
           <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} noValidate>
               {/* Card 1: Personal Details */}
               <div className="table-card" style={{ padding: "26px", marginBottom: "20px" }}>
                 <div className="form-section-heading" style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "20px" }}>
@@ -312,12 +322,16 @@ const AdminProfilePage = () => {
                     <label className="form-label">Full Name *</label>
                     <input
                       type="text"
-                      className="form-control"
+                      className={`form-control ${errors.name ? "is-invalid" : ""}`}
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onChange={(e) => {
+                        setName(e.target.value);
+                        if (errors.name) setErrors((prev) => ({ ...prev, name: "" }));
+                      }}
                       placeholder="e.g. Sureandra Admin"
                       required
                     />
+                    {errors.name && <small className="error-text">{errors.name}</small>}
                   </div>
 
                   <div className="form-group">
@@ -337,12 +351,16 @@ const AdminProfilePage = () => {
                     <label className="form-label">Email Address *</label>
                     <input
                       type="email"
-                      className="form-control"
+                      className={`form-control ${errors.email ? "is-invalid" : ""}`}
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (errors.email) setErrors((prev) => ({ ...prev, email: "" }));
+                      }}
                       placeholder="admin@cars24.com"
                       required
                     />
+                    {errors.email && <small className="error-text">{errors.email}</small>}
                   </div>
 
                   <div className="form-group">
@@ -374,9 +392,12 @@ const AdminProfilePage = () => {
                   <div className="password-input-wrap">
                     <input
                       type={showCurrent ? "text" : "password"}
-                      className="form-control"
+                      className={`form-control ${errors.currentPassword ? "is-invalid" : ""}`}
                       value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      onChange={(e) => {
+                        setCurrentPassword(e.target.value);
+                        if (errors.currentPassword) setErrors((prev) => ({ ...prev, currentPassword: "" }));
+                      }}
                       placeholder="Enter current password to authorize changes"
                       style={{ width: "100%", paddingRight: "40px", boxSizing: "border-box" }}
                     />
@@ -390,6 +411,7 @@ const AdminProfilePage = () => {
                       {showCurrent ? <EyeOffIcon /> : <EyeIcon />}
                     </button>
                   </div>
+                  {errors.currentPassword && <small className="error-text">{errors.currentPassword}</small>}
                 </div>
 
                 <div className="form-grid-2">
@@ -398,9 +420,12 @@ const AdminProfilePage = () => {
                     <div className="password-input-wrap">
                       <input
                         type={showNew ? "text" : "password"}
-                        className="form-control"
+                        className={`form-control ${errors.newPassword ? "is-invalid" : ""}`}
                         value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
+                        onChange={(e) => {
+                          setNewPassword(e.target.value);
+                          if (errors.newPassword) setErrors((prev) => ({ ...prev, newPassword: "" }));
+                        }}
                         placeholder="Min. 6 characters"
                         style={{ width: "100%", paddingRight: "40px", boxSizing: "border-box" }}
                       />
@@ -414,6 +439,7 @@ const AdminProfilePage = () => {
                         {showNew ? <EyeOffIcon /> : <EyeIcon />}
                       </button>
                     </div>
+                    {errors.newPassword && <small className="error-text">{errors.newPassword}</small>}
                   </div>
 
                   <div className="form-group">
@@ -421,9 +447,12 @@ const AdminProfilePage = () => {
                     <div className="password-input-wrap">
                       <input
                         type={showConfirm ? "text" : "password"}
-                        className="form-control"
+                        className={`form-control ${errors.confirmPassword ? "is-invalid" : ""}`}
                         value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        onChange={(e) => {
+                          setConfirmPassword(e.target.value);
+                          if (errors.confirmPassword) setErrors((prev) => ({ ...prev, confirmPassword: "" }));
+                        }}
                         placeholder="Repeat new password"
                         style={{ width: "100%", paddingRight: "40px", boxSizing: "border-box" }}
                       />
@@ -437,6 +466,7 @@ const AdminProfilePage = () => {
                         {showConfirm ? <EyeOffIcon /> : <EyeIcon />}
                       </button>
                     </div>
+                    {errors.confirmPassword && <small className="error-text">{errors.confirmPassword}</small>}
                   </div>
                 </div>
               </div>

@@ -491,7 +491,20 @@ const EmployeeOrderPage = () => {
       setUploadState("");
       fetchRecent(true);
     } catch (error) {
-      setToast(error.response?.data?.message || "Failed to submit order");
+      const errMsg = error.response?.data?.message || "Failed to submit order";
+      setToast(errMsg);
+      const fieldErrors = error.response?.data?.errors || {};
+      if (Object.keys(fieldErrors).length) {
+        setErrors(fieldErrors);
+      } else {
+        const lower = errMsg.toLowerCase();
+        if (lower.includes("mobile")) setErrors((prev) => ({ ...prev, mobileNumber: errMsg }));
+        else if (lower.includes("customer")) setErrors((prev) => ({ ...prev, customerName: errMsg }));
+        else if (lower.includes("pincode")) setErrors((prev) => ({ ...prev, pincode: errMsg }));
+        else if (lower.includes("address")) setErrors((prev) => ({ ...prev, fullAddress: errMsg }));
+        else if (lower.includes("bank")) setErrors((prev) => ({ ...prev, bankName: errMsg }));
+        else if (lower.includes("advance")) setErrors((prev) => ({ ...prev, advanceAmount: errMsg }));
+      }
     } finally {
       setLoading(false);
     }
@@ -805,7 +818,7 @@ const EmployeeOrderPage = () => {
               </button>
             </div>
 
-            <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", overflow: "hidden", flex: 1 }}>
+            <form onSubmit={onSubmit} noValidate style={{ display: "flex", flexDirection: "column", overflow: "hidden", flex: 1 }}>
               <div className="modal-body modal-body-compact" style={{ overflowY: "auto", maxHeight: "calc(90vh - 130px)", flex: 1, padding: "16px 20px" }}>
                 {/* 1. Customer Information */}
                 <div className="compact-section-box">
@@ -821,20 +834,20 @@ const EmployeeOrderPage = () => {
                       <label className="form-label">Customer Name *</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${errors.customerName ? "is-invalid" : ""}`}
                         placeholder="e.g. Rahul Sharma"
                         required
                         value={form.customerName}
                         onChange={(e) => onChange("customerName", sanitizeLetters(e.target.value))}
                       />
-                      {errors.customerName && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.customerName}</small>}
+                      {errors.customerName && <small className="error-text">{errors.customerName}</small>}
                     </div>
 
                     <div className="form-group">
                       <label className="form-label">Mobile Number *</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${errors.mobileNumber ? "is-invalid" : ""}`}
                         placeholder="10-digit number"
                         inputMode="numeric"
                         maxLength={10}
@@ -843,14 +856,14 @@ const EmployeeOrderPage = () => {
                         onKeyDown={preventNonNumericKey}
                         onChange={(e) => onChange("mobileNumber", sanitizeDigits(e.target.value, 10))}
                       />
-                      {errors.mobileNumber && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.mobileNumber}</small>}
+                      {errors.mobileNumber && <small className="error-text">{errors.mobileNumber}</small>}
                     </div>
 
                     <div className="form-group">
                       <label className="form-label">Alternate Mobile</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${errors.alternateMobileNumber ? "is-invalid" : ""}`}
                         placeholder="Optional"
                         inputMode="numeric"
                         maxLength={10}
@@ -858,14 +871,14 @@ const EmployeeOrderPage = () => {
                         onKeyDown={preventNonNumericKey}
                         onChange={(e) => onChange("alternateMobileNumber", sanitizeDigits(e.target.value, 10))}
                       />
-                      {errors.alternateMobileNumber && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.alternateMobileNumber}</small>}
+                      {errors.alternateMobileNumber && <small className="error-text">{errors.alternateMobileNumber}</small>}
                     </div>
 
                     <div className="form-group">
                       <label className="form-label">Pincode *</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${errors.pincode ? "is-invalid" : ""}`}
                         placeholder="6 digits"
                         inputMode="numeric"
                         maxLength={6}
@@ -874,21 +887,21 @@ const EmployeeOrderPage = () => {
                         onKeyDown={preventNonNumericKey}
                         onChange={(e) => onChange("pincode", sanitizeDigits(e.target.value, 6))}
                       />
-                      {errors.pincode && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.pincode}</small>}
+                      {errors.pincode && <small className="error-text">{errors.pincode}</small>}
                     </div>
                   </div>
 
                   <div className="form-group" style={{ marginTop: "4px" }}>
                     <label className="form-label">Full Delivery Address *</label>
                     <textarea
-                      className="form-control"
+                      className={`form-control ${errors.fullAddress ? "is-invalid" : ""}`}
                       placeholder="Enter complete building, street, landmark, city and state..."
                       required
                       rows={2}
                       value={form.fullAddress}
                       onChange={(e) => onChange("fullAddress", e.target.value)}
                     />
-                    {errors.fullAddress && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.fullAddress}</small>}
+                    {errors.fullAddress && <small className="error-text">{errors.fullAddress}</small>}
                   </div>
                 </div>
 
@@ -922,13 +935,13 @@ const EmployeeOrderPage = () => {
                         <label className="form-label">Custom Product Name *</label>
                         <input
                           type="text"
-                          className="form-control"
+                          className={`form-control ${errors.customProductName ? "is-invalid" : ""}`}
                           placeholder="e.g. Dashcam"
                           required
                           value={form.customProductName}
                           onChange={(e) => onChange("customProductName", e.target.value)}
                         />
-                        {errors.customProductName && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.customProductName}</small>}
+                        {errors.customProductName && <small className="error-text">{errors.customProductName}</small>}
                       </div>
                     )}
 
@@ -936,7 +949,7 @@ const EmployeeOrderPage = () => {
                       <label className="form-label">Number of Units *</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${errors.numberOfUnits ? "is-invalid" : ""}`}
                         placeholder="e.g. 1"
                         inputMode="numeric"
                         required
@@ -944,21 +957,21 @@ const EmployeeOrderPage = () => {
                         onKeyDown={preventNonNumericKey}
                         onChange={(e) => onChange("numberOfUnits", sanitizeDigits(e.target.value, 6))}
                       />
-                      {errors.numberOfUnits && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.numberOfUnits}</small>}
+                      {errors.numberOfUnits && <small className="error-text">{errors.numberOfUnits}</small>}
                     </div>
 
                     <div className="form-group">
                       <label className="form-label">Amount per Unit (₹) *</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${errors.amount ? "is-invalid" : ""}`}
                         placeholder="e.g. 3500"
                         inputMode="decimal"
                         required
                         value={form.amount}
                         onChange={(e) => onChange("amount", sanitizePositiveNumber(e.target.value))}
                       />
-                      {errors.amount && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.amount}</small>}
+                      {errors.amount && <small className="error-text">{errors.amount}</small>}
                     </div>
                   </div>
 
@@ -991,14 +1004,14 @@ const EmployeeOrderPage = () => {
                       <label className="form-label" style={{ marginBottom: "2px" }}>Advance Amount (₹) *</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${errors.advanceAmount ? "is-invalid" : ""}`}
                         style={{ height: "30px", fontSize: "12px", padding: "4px 8px" }}
                         placeholder="0"
                         inputMode="decimal"
                         value={form.advanceAmount}
                         onChange={(e) => onChange("advanceAmount", sanitizePositiveNumber(e.target.value))}
                       />
-                      {errors.advanceAmount && <small style={{ color: "#ef4444", fontSize: "10px" }}>{errors.advanceAmount}</small>}
+                      {errors.advanceAmount && <small className="error-text" style={{ fontSize: "10px" }}>{errors.advanceAmount}</small>}
                     </div>
                     <div>
                       <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block" }}>Remaining Amount</span>
@@ -1022,7 +1035,7 @@ const EmployeeOrderPage = () => {
                     <div className="form-group">
                       <label className="form-label">Bank Name *</label>
                       <select
-                        className="form-control"
+                        className={`form-control ${errors.bankName ? "is-invalid" : ""}`}
                         required
                         value={form.bankName}
                         onChange={(e) => onChange("bankName", e.target.value)}
@@ -1038,7 +1051,7 @@ const EmployeeOrderPage = () => {
                         <option value="ICICI">ICICI</option>
                         <option value="Axis">Axis</option>
                       </select>
-                      {errors.bankName && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.bankName}</small>}
+                      {errors.bankName && <small className="error-text">{errors.bankName}</small>}
                     </div>
 
                     <div className="form-group">
@@ -1130,7 +1143,7 @@ const EmployeeOrderPage = () => {
                           </div>
                         )}
                       </div>
-                      {errors.paymentScreenshot && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.paymentScreenshot}</small>}
+                      {errors.paymentScreenshot && <small className="error-text">{errors.paymentScreenshot}</small>}
                     </div>
                   </div>
 

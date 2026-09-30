@@ -60,11 +60,20 @@ const LoginPage = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    const errs = {};
+    if (!email.trim()) errs.email = "Please enter your email or username";
+    if (!password.trim()) errs.password = "Please enter your password";
+    if (Object.keys(errs).length) {
+      setFieldErrors(errs);
+      return;
+    }
+    setFieldErrors({});
     setLoading(true);
 
     try {
@@ -80,6 +89,10 @@ const LoginPage = () => {
     } catch (err) {
       const msg = err.response?.data?.message || err.message || "Invalid credentials. Please verify email and password.";
       setError(msg);
+      setFieldErrors({
+        email: msg.toLowerCase().includes("email") || msg.toLowerCase().includes("user") ? msg : "",
+        password: msg.toLowerCase().includes("password") ? msg : ""
+      });
     } finally {
       setLoading(false);
     }
@@ -116,7 +129,7 @@ const LoginPage = () => {
             )}
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="login-form-body">
+            <form onSubmit={handleSubmit} noValidate className="login-form-body">
               {/* Email / Username Input */}
               <div className="form-group-custom">
                 <label className="input-label-custom">Email or Username</label>
@@ -124,14 +137,18 @@ const LoginPage = () => {
                   <span className="input-field-icon"><MailIcon /></span>
                   <input
                     type="text"
-                    className="input-custom"
+                    className={`input-custom ${fieldErrors.email || error ? "is-invalid" : ""}`}
                     placeholder="Enter email or username"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: "" }));
+                    }}
                     required
                     autoComplete="username"
                   />
                 </div>
+                {fieldErrors.email && <small className="error-text">{fieldErrors.email}</small>}
               </div>
 
               {/* Password Input with Eye Toggle */}
@@ -144,10 +161,13 @@ const LoginPage = () => {
                   <span className="input-field-icon"><LockIcon /></span>
                   <input
                     type={showPassword ? "text" : "password"}
-                    className="input-custom password-field"
+                    className={`input-custom password-field ${fieldErrors.password || error ? "is-invalid" : ""}`}
                     placeholder="Enter your password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: "" }));
+                    }}
                     required
                     autoComplete="current-password"
                   />
@@ -162,6 +182,7 @@ const LoginPage = () => {
                     {showPassword ? <EyeOffIcon /> : <EyeIcon />}
                   </button>
                 </div>
+                {fieldErrors.password && <small className="error-text">{fieldErrors.password}</small>}
               </div>
 
               {/* Submit Button */}

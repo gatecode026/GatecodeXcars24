@@ -243,6 +243,8 @@ const AdminDashboardPage = () => {
   const [editLead, setEditLead] = useState(null);
   const [submittingLead, setSubmittingLead] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
+  const [newLeadErrors, setNewLeadErrors] = useState({});
+  const [editLeadErrors, setEditLeadErrors] = useState({});
 
   const handleImportCustomers = async (rows) => {
     const res = await api.post("/customers/bulk-import", { rows });
@@ -284,6 +286,7 @@ const AdminDashboardPage = () => {
 
   const handleOpenEditLead = (lead) => {
     setEditLead(lead);
+    setEditLeadErrors({});
     setEditLeadForm({
       customerName: lead.customerName || "",
       mobile: lead.mobile || "",
@@ -305,6 +308,15 @@ const AdminDashboardPage = () => {
   const handleSaveEditLead = async (e) => {
     e.preventDefault();
     if (!editLead) return;
+    const errs = {};
+    if (!editLeadForm.customerName.trim()) errs.customerName = "Customer name is required";
+    if (!editLeadForm.mobile.trim()) errs.mobile = "Mobile number is required";
+    else if (editLeadForm.mobile.replace(/\D/g, "").length < 10) errs.mobile = "Enter valid 10-digit mobile number";
+    if (Object.keys(errs).length) {
+      setEditLeadErrors(errs);
+      return;
+    }
+    setEditLeadErrors({});
     setSubmittingLead(true);
     try {
       const payload = {
@@ -318,7 +330,11 @@ const AdminDashboardPage = () => {
       fetchDashboardData(true);
     } catch (err) {
       console.error("Update lead error:", err);
-      showToast(err.response?.data?.message || "Failed to update lead", "error");
+      const msg = err.response?.data?.message || "Failed to update lead";
+      showToast(msg, "error");
+      const lower = msg.toLowerCase();
+      if (lower.includes("mobile") || lower.includes("phone")) setEditLeadErrors((p) => ({ ...p, mobile: msg }));
+      else if (lower.includes("customer") || lower.includes("name")) setEditLeadErrors((p) => ({ ...p, customerName: msg }));
     } finally {
       setSubmittingLead(false);
     }
@@ -438,11 +454,17 @@ const AdminDashboardPage = () => {
   // Handle Create Lead
   const handleCreateLead = async (e) => {
     e.preventDefault();
-    if (!newLeadForm.customerName.trim() || !newLeadForm.mobile.trim()) {
-      showToast("Customer Name and Mobile are required", "error");
+    const errs = {};
+    if (!newLeadForm.customerName.trim()) errs.customerName = "Customer name is required";
+    if (!newLeadForm.mobile.trim()) errs.mobile = "Mobile number is required";
+    else if (newLeadForm.mobile.replace(/\D/g, "").length < 10) errs.mobile = "Enter valid 10-digit mobile number";
+
+    if (Object.keys(errs).length) {
+      setNewLeadErrors(errs);
       return;
     }
 
+    setNewLeadErrors({});
     setSubmittingLead(true);
     try {
       await api.post("/customers", {
@@ -466,7 +488,11 @@ const AdminDashboardPage = () => {
       fetchDashboardData(true);
     } catch (err) {
       console.error("Create lead error:", err);
-      showToast(err.response?.data?.message || "Failed to create lead", "error");
+      const msg = err.response?.data?.message || "Failed to create lead";
+      showToast(msg, "error");
+      const lower = msg.toLowerCase();
+      if (lower.includes("mobile") || lower.includes("phone")) setNewLeadErrors((p) => ({ ...p, mobile: msg }));
+      else if (lower.includes("customer") || lower.includes("name")) setNewLeadErrors((p) => ({ ...p, customerName: msg }));
     } finally {
       setSubmittingLead(false);
     }
@@ -1224,7 +1250,7 @@ const AdminDashboardPage = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateLead}>
+            <form onSubmit={handleCreateLead} noValidate>
               <div className="modal-body modal-body-compact">
                 {/* 1. Customer & Vehicle */}
                 <div className="compact-section-box">
@@ -1266,28 +1292,32 @@ const AdminDashboardPage = () => {
                       <label className="form-label">Customer Name *</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${newLeadErrors.customerName ? "is-invalid" : ""}`}
                         placeholder="e.g. Rahul Sharma"
                         required
                         value={newLeadForm.customerName}
-                        onChange={(e) =>
-                          setNewLeadForm({ ...newLeadForm, customerName: e.target.value })
-                        }
+                        onChange={(e) => {
+                          setNewLeadForm({ ...newLeadForm, customerName: e.target.value });
+                          if (newLeadErrors.customerName) setNewLeadErrors((prev) => ({ ...prev, customerName: "" }));
+                        }}
                       />
+                      {newLeadErrors.customerName && <small className="error-text">{newLeadErrors.customerName}</small>}
                     </div>
 
                     <div className="form-group">
                       <label className="form-label">Mobile Number *</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${newLeadErrors.mobile ? "is-invalid" : ""}`}
                         placeholder="e.g. 9876543210"
                         required
                         value={newLeadForm.mobile}
-                        onChange={(e) =>
-                          setNewLeadForm({ ...newLeadForm, mobile: e.target.value })
-                        }
+                        onChange={(e) => {
+                          setNewLeadForm({ ...newLeadForm, mobile: e.target.value });
+                          if (newLeadErrors.mobile) setNewLeadErrors((prev) => ({ ...prev, mobile: "" }));
+                        }}
                       />
+                      {newLeadErrors.mobile && <small className="error-text">{newLeadErrors.mobile}</small>}
                     </div>
 
                     <div className="form-group">
@@ -1533,7 +1563,7 @@ const AdminDashboardPage = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSaveEditLead}>
+            <form onSubmit={handleSaveEditLead} noValidate>
               <div className="modal-body modal-body-compact">
                 {/* 1. Customer & Vehicle Details */}
                 <div className="compact-section-box">
@@ -1575,28 +1605,32 @@ const AdminDashboardPage = () => {
                       <label className="form-label">Customer Name *</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${editLeadErrors.customerName ? "is-invalid" : ""}`}
                         placeholder="e.g. Ramesh Patel"
                         required
                         value={editLeadForm.customerName}
-                        onChange={(e) =>
-                          setEditLeadForm({ ...editLeadForm, customerName: e.target.value })
-                        }
+                        onChange={(e) => {
+                          setEditLeadForm({ ...editLeadForm, customerName: e.target.value });
+                          if (editLeadErrors.customerName) setEditLeadErrors((prev) => ({ ...prev, customerName: "" }));
+                        }}
                       />
+                      {editLeadErrors.customerName && <small className="error-text">{editLeadErrors.customerName}</small>}
                     </div>
 
                     <div className="form-group">
                       <label className="form-label">Cx Mobile No. *</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${editLeadErrors.mobile ? "is-invalid" : ""}`}
                         placeholder="e.g. 9876543210"
                         required
                         value={editLeadForm.mobile}
-                        onChange={(e) =>
-                          setEditLeadForm({ ...editLeadForm, mobile: e.target.value })
-                        }
+                        onChange={(e) => {
+                          setEditLeadForm({ ...editLeadForm, mobile: e.target.value });
+                          if (editLeadErrors.mobile) setEditLeadErrors((prev) => ({ ...prev, mobile: "" }));
+                        }}
                       />
+                      {editLeadErrors.mobile && <small className="error-text">{editLeadErrors.mobile}</small>}
                     </div>
 
                     <div className="form-group">

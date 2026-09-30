@@ -4996,3 +4996,47 @@ textarea {
   border-radius: 50%;
   animation: livePulseGreen 1.8s infinite;
 }
+
+/* ─── Global Form Validation & Inline Errors ────────────────────────────── */
+.form-control.is-invalid,
+.input-custom.is-invalid,
+input.is-invalid,
+select.is-invalid,
+textarea.is-invalid {
+  border-color: #ef4444 !important;
+  background-color: #fef2f2 !important;
+  box-shadow: 0 0 0 2.5px rgba(239, 68, 68, 0.15) !important;
+}
+
+.form-control.is-invalid:focus,
+.input-custom.is-invalid:focus,
+input.is-invalid:focus,
+select.is-invalid:focus,
+textarea.is-invalid:focus {
+  border-color: #dc2626 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25) !important;
+}
+
+.error-text,
+.inline-error-msg {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #dc2626 !important;
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
+  margin-top: 4px !important;
+  line-height: 1.25;
+  animation: errorFadeIn 0.18s ease-in-out;
+}
+
+@keyframes errorFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

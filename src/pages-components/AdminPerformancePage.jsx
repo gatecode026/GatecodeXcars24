@@ -136,6 +136,7 @@ function SettingsModal({ current, onSaved, onClose }) {
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const toggleDay = (d) =>
     setForm((f) => ({
@@ -145,8 +146,30 @@ function SettingsModal({ current, onSaved, onClose }) {
         : [...f.workingDays, d].sort()
     }));
 
+  const validate = () => {
+    const errs = {};
+    if (!form.dailyAppointmentTarget || Number(form.dailyAppointmentTarget) <= 0) {
+      errs.dailyAppointmentTarget = "Please enter a valid daily target (min 1)";
+    }
+    if (form.monthlySalesTarget === "" || Number(form.monthlySalesTarget) < 0) {
+      errs.monthlySalesTarget = "Please enter a valid monthly sales target";
+    }
+    if (form.bonusRate === "" || Number(form.bonusRate) < 0) {
+      errs.bonusRate = "Please enter a valid bonus rate";
+    }
+    if (form.saleValuePerLead === "" || Number(form.saleValuePerLead) < 0) {
+      errs.saleValuePerLead = "Please enter a valid sale value per lead";
+    }
+    if (!form.effectiveFrom) {
+      errs.effectiveFrom = "Effective date is required";
+    }
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!validate()) return;
     setSaving(true);
     setErr(null);
     try {
@@ -162,7 +185,15 @@ function SettingsModal({ current, onSaved, onClose }) {
       onSaved();
       onClose();
     } catch (e2) {
-      setErr(e2.response?.data?.message || "Failed to update performance settings.");
+      const msg = e2.response?.data?.message || "Failed to update performance settings.";
+      setErr(msg);
+      const lower = msg.toLowerCase();
+      const errs = {};
+      if (lower.includes("appointment")) errs.dailyAppointmentTarget = msg;
+      if (lower.includes("sales")) errs.monthlySalesTarget = msg;
+      if (lower.includes("bonus")) errs.bonusRate = msg;
+      if (lower.includes("date") || lower.includes("effective")) errs.effectiveFrom = msg;
+      if (Object.keys(errs).length > 0) setFieldErrors(errs);
     } finally {
       setSaving(false);
     }
@@ -181,7 +212,7 @@ function SettingsModal({ current, onSaved, onClose }) {
           </button>
         </div>
 
-        <form onSubmit={handleSave}>
+        <form onSubmit={handleSave} noValidate>
           <div className="modal-body modal-body-compact" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             {err && (
               <div style={{ background: "#fef2f2", color: "#dc2626", padding: "10px 14px", borderRadius: "8px", fontSize: "12.5px" }}>
@@ -196,11 +227,15 @@ function SettingsModal({ current, onSaved, onClose }) {
                   type="number"
                   min="1"
                   max="100"
-                  className="form-control"
+                  className={`form-control ${fieldErrors.dailyAppointmentTarget ? "is-invalid" : ""}`}
                   value={form.dailyAppointmentTarget}
-                  onChange={(e) => setForm({ ...form, dailyAppointmentTarget: e.target.value })}
+                  onChange={(e) => {
+                    setForm({ ...form, dailyAppointmentTarget: e.target.value });
+                    if (fieldErrors.dailyAppointmentTarget) setFieldErrors(prev => ({ ...prev, dailyAppointmentTarget: undefined }));
+                  }}
                   required
                 />
+                {fieldErrors.dailyAppointmentTarget && <small className="error-text">{fieldErrors.dailyAppointmentTarget}</small>}
                 <span className="form-hint">Appointments required per employee per working day</span>
               </div>
 
@@ -210,11 +245,15 @@ function SettingsModal({ current, onSaved, onClose }) {
                   type="number"
                   min="0"
                   step="10000"
-                  className="form-control"
+                  className={`form-control ${fieldErrors.monthlySalesTarget ? "is-invalid" : ""}`}
                   value={form.monthlySalesTarget}
-                  onChange={(e) => setForm({ ...form, monthlySalesTarget: e.target.value })}
+                  onChange={(e) => {
+                    setForm({ ...form, monthlySalesTarget: e.target.value });
+                    if (fieldErrors.monthlySalesTarget) setFieldErrors(prev => ({ ...prev, monthlySalesTarget: undefined }));
+                  }}
                   required
                 />
+                {fieldErrors.monthlySalesTarget && <small className="error-text">{fieldErrors.monthlySalesTarget}</small>}
                 <span className="form-hint">Standard monthly sales benchmark</span>
               </div>
             </div>
@@ -227,11 +266,15 @@ function SettingsModal({ current, onSaved, onClose }) {
                   min="0"
                   max="100"
                   step="0.05"
-                  className="form-control"
+                  className={`form-control ${fieldErrors.bonusRate ? "is-invalid" : ""}`}
                   value={form.bonusRate}
-                  onChange={(e) => setForm({ ...form, bonusRate: e.target.value })}
+                  onChange={(e) => {
+                    setForm({ ...form, bonusRate: e.target.value });
+                    if (fieldErrors.bonusRate) setFieldErrors(prev => ({ ...prev, bonusRate: undefined }));
+                  }}
                   required
                 />
+                {fieldErrors.bonusRate && <small className="error-text">{fieldErrors.bonusRate}</small>}
                 <span className="form-hint">Applied to sales surplus above monthly target</span>
               </div>
 
@@ -241,11 +284,15 @@ function SettingsModal({ current, onSaved, onClose }) {
                   type="number"
                   min="0"
                   step="1000"
-                  className="form-control"
+                  className={`form-control ${fieldErrors.saleValuePerLead ? "is-invalid" : ""}`}
                   value={form.saleValuePerLead}
-                  onChange={(e) => setForm({ ...form, saleValuePerLead: e.target.value })}
+                  onChange={(e) => {
+                    setForm({ ...form, saleValuePerLead: e.target.value });
+                    if (fieldErrors.saleValuePerLead) setFieldErrors(prev => ({ ...prev, saleValuePerLead: undefined }));
+                  }}
                   required
                 />
+                {fieldErrors.saleValuePerLead && <small className="error-text">{fieldErrors.saleValuePerLead}</small>}
                 <span className="form-hint">Attributed value counted for verified leads</span>
               </div>
             </div>
@@ -272,11 +319,15 @@ function SettingsModal({ current, onSaved, onClose }) {
                 <label className="form-label">Effective From</label>
                 <input
                   type="date"
-                  className="form-control"
+                  className={`form-control ${fieldErrors.effectiveFrom ? "is-invalid" : ""}`}
                   value={form.effectiveFrom}
-                  onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })}
+                  onChange={(e) => {
+                    setForm({ ...form, effectiveFrom: e.target.value });
+                    if (fieldErrors.effectiveFrom) setFieldErrors(prev => ({ ...prev, effectiveFrom: undefined }));
+                  }}
                   required
                 />
+                {fieldErrors.effectiveFrom && <small className="error-text">{fieldErrors.effectiveFrom}</small>}
                 <span className="form-hint">Date when this configuration takes effect</span>
               </div>
 

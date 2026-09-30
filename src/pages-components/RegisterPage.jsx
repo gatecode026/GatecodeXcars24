@@ -134,6 +134,11 @@ const RegisterPage = () => {
     } catch (error) {
       const errMsg = error.response?.data?.message || "Operation failed. Please try again.";
       setToast({ message: errMsg, type: "error" });
+      const lower = errMsg.toLowerCase();
+      if (lower.includes("email")) setErrors((prev) => ({ ...prev, email: errMsg }));
+      else if (lower.includes("phone") || lower.includes("mobile")) setErrors((prev) => ({ ...prev, phoneNumber: errMsg }));
+      else if (lower.includes("name")) setErrors((prev) => ({ ...prev, name: errMsg }));
+      else if (lower.includes("password")) setErrors((prev) => ({ ...prev, password: errMsg }));
     } finally {
       setSubmitting(false);
     }
@@ -186,7 +191,7 @@ const RegisterPage = () => {
       ) : (
         /* Form Card */
         <div className="table-card" style={{ maxWidth: "760px", margin: "0 auto", padding: "28px" }}>
-          <form onSubmit={onSubmit}>
+          <form onSubmit={onSubmit} noValidate>
             {/* 1. Account Profile */}
             <div className="form-section-card">
               <div className="form-section-heading">Employee Profile Information</div>
@@ -195,20 +200,20 @@ const RegisterPage = () => {
                   <label className="form-label">Full Name *</label>
                   <input
                     type="text"
-                    className="form-control"
+                    className={`form-control ${errors.name ? "is-invalid" : ""}`}
                     placeholder="e.g. Ramesh Patel"
                     value={form.name}
                     onChange={(e) => onChange("name", e.target.value)}
                     required
                   />
-                  {errors.name && <span style={{ color: "#ef4444", fontSize: "11.5px", marginTop: "4px", display: "block" }}>{errors.name}</span>}
+                  {errors.name && <small className="error-text">{errors.name}</small>}
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">Mobile Number *</label>
                   <input
                     type="text"
-                    className="form-control"
+                    className={`form-control ${errors.phoneNumber ? "is-invalid" : ""}`}
                     placeholder="10-digit mobile number"
                     inputMode="numeric"
                     maxLength={10}
@@ -216,7 +221,7 @@ const RegisterPage = () => {
                     onChange={(e) => onChange("phoneNumber", sanitizeDigits(e.target.value, 10))}
                     required
                   />
-                  {errors.phoneNumber && <span style={{ color: "#ef4444", fontSize: "11.5px", marginTop: "4px", display: "block" }}>{errors.phoneNumber}</span>}
+                  {errors.phoneNumber && <small className="error-text">{errors.phoneNumber}</small>}
                 </div>
               </div>
 
@@ -225,13 +230,13 @@ const RegisterPage = () => {
                   <label className="form-label">Email Address *</label>
                   <input
                     type="email"
-                    className="form-control"
+                    className={`form-control ${errors.email ? "is-invalid" : ""}`}
                     placeholder="e.g. employee@gatexpay.co.in"
                     value={form.email}
                     onChange={(e) => onChange("email", e.target.value)}
                     required
                   />
-                  {errors.email && <span style={{ color: "#ef4444", fontSize: "11.5px", marginTop: "4px", display: "block" }}>{errors.email}</span>}
+                  {errors.email && <small className="error-text">{errors.email}</small>}
                 </div>
               </div>
             </div>
@@ -247,7 +252,7 @@ const RegisterPage = () => {
                   <div style={{ position: "relative" }}>
                     <input
                       type={showPassword ? "text" : "password"}
-                      className="form-control"
+                      className={`form-control ${errors.password ? "is-invalid" : ""}`}
                       placeholder={isEdit ? "Enter new password if changing" : "Minimum 6 characters"}
                       value={form.password}
                       autoComplete="new-password"
@@ -276,7 +281,7 @@ const RegisterPage = () => {
                       {showPassword ? <EyeOffIcon /> : <EyeIcon />}
                     </button>
                   </div>
-                  {errors.password && <span style={{ color: "#ef4444", fontSize: "11.5px", marginTop: "4px", display: "block" }}>{errors.password}</span>}
+                  {errors.password && <small className="error-text">{errors.password}</small>}
                 </div>
 
                 <div className="form-group">

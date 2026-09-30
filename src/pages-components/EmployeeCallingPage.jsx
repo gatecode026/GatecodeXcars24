@@ -313,16 +313,20 @@ const EmployeeCallingPage = () => {
 
   const validate = () => {
     const next = {};
+    if (!form.date) {
+      next.date = "Calling date is required";
+    }
+
     if (form.conversionsDone === "" || form.conversionsDone === null || form.conversionsDone === undefined) {
-      next.conversionsDone = "Required";
+      next.conversionsDone = "Conversions count is required";
     } else if (Number(form.conversionsDone) < 0) {
-      next.conversionsDone = "Must be 0+";
+      next.conversionsDone = "Conversions must be 0 or more";
     }
 
     if (form.revenueGenerated === "" || form.revenueGenerated === null || form.revenueGenerated === undefined) {
-      next.revenueGenerated = "Required";
+      next.revenueGenerated = "Revenue generated is required";
     } else if (Number(form.revenueGenerated) < 0) {
-      next.revenueGenerated = "Must be 0+";
+      next.revenueGenerated = "Revenue must be 0 or more";
     }
 
     setErrors(next);
@@ -353,6 +357,9 @@ const EmployeeCallingPage = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+    if (errors[name]) {
+      setErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -393,7 +400,17 @@ const EmployeeCallingPage = () => {
       setIsFormOpen(false);
       fetchRecords();
     } catch (error) {
-      setToast(error.response?.data?.message || "Failed to save calling report");
+      const errMsg = error.response?.data?.message || "Failed to save calling report";
+      setToast(errMsg);
+      const fieldErrors = error.response?.data?.errors || {};
+      if (Object.keys(fieldErrors).length) {
+        setErrors(fieldErrors);
+      } else {
+        const lower = errMsg.toLowerCase();
+        if (lower.includes("conversion")) setErrors((prev) => ({ ...prev, conversionsDone: errMsg }));
+        else if (lower.includes("revenue")) setErrors((prev) => ({ ...prev, revenueGenerated: errMsg }));
+        else if (lower.includes("date")) setErrors((prev) => ({ ...prev, date: errMsg }));
+      }
     } finally {
       setSaving(false);
     }
@@ -1048,7 +1065,7 @@ const EmployeeCallingPage = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} noValidate>
               <div className="modal-body modal-body-compact">
                 {/* Section 1: Call Volume & Activity (Row 1) */}
                 <div className="compact-section-box">
@@ -1058,19 +1075,20 @@ const EmployeeCallingPage = () => {
                   </div>
                   <div className="compact-grid-4">
                     <div className="form-group">
-                      <label className="form-label">Calling Date</label>
+                      <label className="form-label">Calling Date *</label>
                       <div className="styled-picker-wrap">
                         <span className="picker-icon"><CalendarIcon /></span>
                         <input
                           type="date"
                           name="date"
-                          className="form-control"
+                          className={`form-control ${errors.date ? "is-invalid" : ""}`}
                           value={form.date}
                           max={today}
                           onChange={handleChange}
                           required
                         />
                       </div>
+                      {errors.date && <small className="error-text">{errors.date}</small>}
                     </div>
 
                     <div className="form-group">
@@ -1213,14 +1231,14 @@ const EmployeeCallingPage = () => {
                       <input
                         type="number"
                         name="conversionsDone"
-                        className="form-control"
+                        className={`form-control ${errors.conversionsDone ? "is-invalid" : ""}`}
                         placeholder="e.g. 2"
                         min="0"
                         required
                         value={form.conversionsDone}
                         onChange={handleChange}
-                        style={errors.conversionsDone ? { borderColor: "#ef4444" } : {}}
                       />
+                      {errors.conversionsDone && <small className="error-text">{errors.conversionsDone}</small>}
                     </div>
 
                     <div className="form-group">
@@ -1230,14 +1248,14 @@ const EmployeeCallingPage = () => {
                       <input
                         type="number"
                         name="revenueGenerated"
-                        className="form-control"
+                        className={`form-control ${errors.revenueGenerated ? "is-invalid" : ""}`}
                         placeholder="e.g. 15000"
                         min="0"
                         required
                         value={form.revenueGenerated}
                         onChange={handleChange}
-                        style={errors.revenueGenerated ? { borderColor: "#ef4444" } : {}}
                       />
+                      {errors.revenueGenerated && <small className="error-text">{errors.revenueGenerated}</small>}
                     </div>
                   </div>
                 </div>

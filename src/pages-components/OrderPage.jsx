@@ -56,8 +56,8 @@ const OrderPage = () => {
     }).format(Number(value || 0));
 
   const getFieldClass = (key) => {
-    if (!form[key]) return "";
-    return errors[key] ? "field-invalid" : "field-valid";
+    if (errors[key]) return "field-invalid is-invalid";
+    return form[key] ? "field-valid" : "";
   };
 
   const sanitizeDigits = (value, max) => value.replace(/\D/g, "").slice(0, max);
@@ -95,6 +95,7 @@ const OrderPage = () => {
 
   const onChange = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    if (errors[key]) setErrors((prev) => ({ ...prev, [key]: undefined }));
   };
 
   const handleScreenshot = (file) => {
@@ -148,7 +149,20 @@ const OrderPage = () => {
       await api.post("/orders", payload);
       navigate("/admin/orders/manage", { replace: true });
     } catch (error) {
-      setMessage(error.response?.data?.message || "Failed to submit order");
+      const errMsg = error.response?.data?.message || "Failed to submit order";
+      setMessage(errMsg);
+      const fieldErrors = error.response?.data?.errors || {};
+      if (Object.keys(fieldErrors).length) {
+        setErrors(fieldErrors);
+      } else {
+        const lower = errMsg.toLowerCase();
+        if (lower.includes("mobile")) setErrors((prev) => ({ ...prev, mobileNumber: errMsg }));
+        else if (lower.includes("customer")) setErrors((prev) => ({ ...prev, customerName: errMsg }));
+        else if (lower.includes("pincode")) setErrors((prev) => ({ ...prev, pincode: errMsg }));
+        else if (lower.includes("address")) setErrors((prev) => ({ ...prev, fullAddress: errMsg }));
+        else if (lower.includes("bank")) setErrors((prev) => ({ ...prev, bankName: errMsg }));
+        else if (lower.includes("advance")) setErrors((prev) => ({ ...prev, advanceAmount: errMsg }));
+      }
     } finally {
       setLoading(false);
     }
@@ -164,7 +178,7 @@ const OrderPage = () => {
       </div>
 
       <div className="form-card glass-card">
-        <form className="modern-form" onSubmit={onSubmit}>
+        <form className="modern-form" onSubmit={onSubmit} noValidate>
           <div className="form-section">
             <h3 className="form-section-title">Customer Information</h3>
             <div className="form-section-content">
