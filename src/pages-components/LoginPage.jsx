@@ -1,4 +1,5 @@
 "use client";
+import "@/src/styles/index.css";
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -89,14 +90,15 @@ const LoginPage = () => {
     <div className="login-wrapper">
       <div className="login-bg-glow" />
 
-      <div className="login-compact-card">
+      <div className="login-compact-card" style={{ maxWidth: "420px", width: "100%", margin: "auto" }}>
         {/* Header with Emblem */}
         <div className="login-card-header">
-          <div className="login-logo-circle-wrap">
+          <div className="login-logo-circle-wrap" style={{ width: "56px", height: "56px", margin: "0 auto 12px" }}>
             <img
               src="/logo.jpg"
               alt="GatecodeXcars24"
               className="login-card-logo"
+              style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%", display: "block" }}
               onError={(e) => { e.target.style.display = 'none'; }}
             />
           </div>
