@@ -371,12 +371,6 @@ export const loginAdmin = async (req, res, next) => {
         ok = await bcrypt.compare(cleanPassword.toLowerCase(), user.password);
       }
 
-      if (!ok && (user.username === "tl" || user.email === "tl@gatecode.in" || user.role === "tl")) {
-        if (cleanPassword === "tl" || cleanPassword === "123456" || cleanPassword === "gatecode" || cleanPassword === "surendra") {
-          ok = true;
-        }
-      }
-
       if (!ok) {
         return res.status(401).json({ message: "Invalid credentials" });
       }

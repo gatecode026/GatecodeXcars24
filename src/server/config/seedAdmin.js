@@ -27,23 +27,6 @@ export const ensureFixedAdminUser = async () => {
 
     console.log(`Fixed admin user ready: ${adminEmail}`);
   }
-
-  // Also ensure default TL account exists
-  const existingTL = await User.findOne({
-    $or: [{ username: "tl" }, { email: "tl@gatecode.in" }, { role: "tl" }]
-  });
-  if (!existingTL) {
-    const hashedTLPassword = await bcrypt.hash("123456", 10);
-    await User.create({
-      name: "Team Leader (TL)",
-      email: "tl@gatecode.in",
-      username: "tl",
-      password: hashedTLPassword,
-      phoneNumber: "9876543211",
-      role: "tl"
-    });
-    console.log("Default TL user ready: username 'tl' / password '123456' (tl@gatecode.in)");
-  }
 };
 
 
