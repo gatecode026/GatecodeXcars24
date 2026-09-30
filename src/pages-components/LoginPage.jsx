@@ -56,9 +56,6 @@ const LoginPage = () => {
   const location = useLocation();
   const { login } = useAuth();
 
-  const isExplicitAdmin = location.pathname === "/login/admin" || location.pathname === "/admin/login";
-  const [selectedRole, setSelectedRole] = useState(isExplicitAdmin ? "admin" : "employee");
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -74,10 +71,10 @@ const LoginPage = () => {
       const trimmedEmail = email.trim();
       const trimmedPassword = password.trim();
 
-      const decoded = await login(trimmedEmail, trimmedPassword, selectedRole);
-      const targetRole = decoded?.role || selectedRole;
+      const decoded = await login(trimmedEmail, trimmedPassword);
+      const targetRole = decoded?.role || "employee";
       navigate(
-        targetRole === "employee" ? "/employee/dashboard" : "/admin/dashboard",
+        targetRole === "admin" ? "/admin/dashboard" : "/employee/dashboard",
         { replace: true }
       );
     } catch (err) {
@@ -106,35 +103,9 @@ const LoginPage = () => {
           <span className="login-brand-chip">GatecodeXcars24</span>
           <h2 className="login-card-title">Sign In to Platform</h2>
           <p className="login-card-subtitle">
-            Select role to access your dedicated operations portal
+            Enter your credentials to access your operations portal
           </p>
         </div>
-
-            {/* Role Switcher Tabs */}
-            <div className="login-segmented-tabs">
-              <button
-                type="button"
-                className={`login-segment-btn ${selectedRole === "employee" ? "active" : ""}`}
-                onClick={() => {
-                  setSelectedRole("employee");
-                  setError("");
-                }}
-              >
-                <span className="segment-role-dot employee" />
-                <span>Sales Executive</span>
-              </button>
-              <button
-                type="button"
-                className={`login-segment-btn ${selectedRole === "admin" ? "active" : ""}`}
-                onClick={() => {
-                  setSelectedRole("admin");
-                  setError("");
-                }}
-              >
-                <span className="segment-role-dot admin" />
-                <span>Administrator</span>
-              </button>
-            </div>
 
             {/* Error Message Alert */}
             {error && (
@@ -206,7 +177,7 @@ const LoginPage = () => {
                   </>
                 ) : (
                   <>
-                    <span>Sign In as {selectedRole === "admin" ? "Administrator" : "Sales Executive"}</span>
+                    <span>Sign In</span>
                     <span className="btn-arrow-icon"><ArrowRightIcon /></span>
                   </>
                 )}

@@ -55,27 +55,11 @@ const LoginPage = () => {
   const location = useLocation();
   const { login } = useAuth();
 
-  const isExplicitAdmin = location.pathname === "/login/admin" || location.pathname === "/admin/login";
-  const [selectedRole, setSelectedRole] = useState(isExplicitAdmin ? "admin" : "employee");
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // Quick fill helper for convenience
-  const fillCredentials = (role) => {
-    setSelectedRole(role);
-    setError("");
-    if (role === "admin") {
-      setEmail("uttam306115@gmail.com");
-      setPassword("uttam@2004");
-    } else {
-      setEmail("gatecode");
-      setPassword("123456");
-    }
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -86,9 +70,9 @@ const LoginPage = () => {
       const trimmedEmail = email.trim();
       const trimmedPassword = password.trim();
 
-      const decoded = await login(trimmedEmail, trimmedPassword, selectedRole);
+      const decoded = await login(trimmedEmail, trimmedPassword);
       navigate(
-        decoded.role === "employee" ? "/employee/dashboard" : "/admin/dashboard",
+        decoded?.role === "admin" ? "/admin/dashboard" : "/employee/dashboard",
         { replace: true }
       );
     } catch (err) {
@@ -117,58 +101,9 @@ const LoginPage = () => {
           <span className="login-brand-chip">GatecodeXcars24</span>
           <h2 className="login-card-title">Sign In to Platform</h2>
           <p className="login-card-subtitle">
-            Select role to access your dedicated operations portal
+            Enter your credentials to access your operations portal
           </p>
         </div>
-
-            {/* Role Switcher Tabs */}
-            <div className="login-segmented-tabs">
-              <button
-                type="button"
-                className={`login-segment-btn ${selectedRole === "employee" ? "active" : ""}`}
-                onClick={() => {
-                  setSelectedRole("employee");
-                  setError("");
-                }}
-              >
-                <span className="segment-role-dot employee" />
-                <span>Sales Executive</span>
-              </button>
-              <button
-                type="button"
-                className={`login-segment-btn ${selectedRole === "admin" ? "active" : ""}`}
-                onClick={() => {
-                  setSelectedRole("admin");
-                  setError("");
-                }}
-              >
-                <span className="segment-role-dot admin" />
-                <span>Administrator</span>
-              </button>
-            </div>
-
-            {/* Quick-Fill Helpers */}
-            <div className="login-quick-fill-bar">
-              <span className="quick-fill-label">Demo Access:</span>
-              <div className="quick-fill-chips-group">
-                <button
-                  type="button"
-                  className="quick-fill-chip chip-admin"
-                  onClick={() => fillCredentials("admin")}
-                  title="Auto-fill Administrator credentials"
-                >
-                  ⚡ Admin / TL
-                </button>
-                <button
-                  type="button"
-                  className="quick-fill-chip chip-executive"
-                  onClick={() => fillCredentials("employee")}
-                  title="Auto-fill Executive credentials"
-                >
-                  ⚡ Executive
-                </button>
-              </div>
-            </div>
 
             {/* Error Message Alert */}
             {error && (
@@ -240,7 +175,7 @@ const LoginPage = () => {
                   </>
                 ) : (
                   <>
-                    <span>Sign In as {selectedRole === "admin" ? "Administrator" : "Sales Executive"}</span>
+                    <span>Sign In</span>
                     <span className="btn-arrow-icon"><ArrowRightIcon /></span>
                   </>
                 )}
