@@ -346,9 +346,9 @@ const CallingReportPage = () => {
     }
   }, []);
 
-  const fetchRecords = useCallback(async (isBackground = false) => {
+  const fetchRecords = useCallback(async () => {
     try {
-      if (!isBackground) setLoading(true);
+      setLoading(true);
       const params = {};
       if (selectedEmployee) params.employeeId = selectedEmployee;
 
@@ -378,9 +378,9 @@ const CallingReportPage = () => {
       const res = await api.get("/calling-records", { params });
       setRecords(res.data.data || []);
     } catch {
-      // keep current records if background
+      setRecords([]);
     } finally {
-      if (!isBackground) setLoading(false);
+      setLoading(false);
     }
   }, [selectedEmployee, filter, startDate, endDate]);
 
@@ -390,44 +390,26 @@ const CallingReportPage = () => {
 
   useEffect(() => {
     fetchRecords();
-    const interval = setInterval(() => {
-      fetchRecords(true);
-    }, 8000);
-    const onFocus = () => fetchRecords(true);
-    window.addEventListener("focus", onFocus);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("focus", onFocus);
-    };
   }, [fetchRecords]);
 
-  // Aggregate totals with strict mathematical bounds
+  // Aggregate totals
   const totals = useMemo(() => {
     return records.reduce(
       (acc, r) => {
-        const out = Number(r.outgoingCalls) || 0;
-        const inc = Number(r.incomingCalls) || 0;
-        const fu = Number(r.followUpCalls) || 0;
-        const total = out + inc + fu;
-        const conn = Math.min(Number(r.connectedCalls) || 0, total);
-        const notConn = Math.max(0, total - conn);
-        const intLeads = Math.min(Number(r.interestedLeads) || 0, conn > 0 ? conn : total);
-        const notIntLeads = Number(r.notInterestedLeads) || 0;
-        const fuLeads = Number(r.followUpLeads) || 0;
-        const conv = Math.min(Number(r.conversionsDone) || 0, intLeads > 0 ? intLeads : conn);
-        const rev = Number(r.revenueGenerated) || 0;
-
+        const out = r.outgoingCalls || 0;
+        const inc = r.incomingCalls || 0;
+        const fu = r.followUpCalls || 0;
         acc.outgoingCalls += out;
         acc.incomingCalls += inc;
-        acc.connectedCalls += conn;
-        acc.notConnectedCalls += notConn;
-        acc.interestedLeads += intLeads;
-        acc.notInterestedLeads += notIntLeads;
+        acc.connectedCalls += r.connectedCalls || 0;
+        acc.notConnectedCalls += r.notConnectedCalls || 0;
+        acc.interestedLeads += r.interestedLeads || 0;
+        acc.notInterestedLeads += r.notInterestedLeads || 0;
         acc.followUpCalls += fu;
-        acc.followUpLeads += fuLeads;
-        acc.conversionsDone += conv;
-        acc.revenueGenerated += rev;
-        acc.totalCalls += total;
+        acc.followUpLeads += r.followUpLeads || 0;
+        acc.conversionsDone += r.conversionsDone || 0;
+        acc.revenueGenerated += r.revenueGenerated || 0;
+        acc.totalCalls += out + inc + fu;
         return acc;
       },
       {
@@ -446,12 +428,10 @@ const CallingReportPage = () => {
     );
   }, [records]);
 
-  // Derived Performance Metrics (strictly bounded 0% - 100%)
-  const connectRate = totals.totalCalls > 0 ? Math.min(100, Math.round((totals.connectedCalls / totals.totalCalls) * 100)) : 0;
-  const leadRate = totals.connectedCalls > 0 ? Math.min(100, Math.round((totals.interestedLeads / totals.connectedCalls) * 100)) : 0;
-  const convRate = totals.interestedLeads > 0 
-    ? Math.min(100, Math.round((totals.conversionsDone / totals.interestedLeads) * 100)) 
-    : (totals.connectedCalls > 0 ? Math.min(100, Math.round((totals.conversionsDone / totals.connectedCalls) * 100)) : 0);
+  // Derived Performance Metrics
+  const connectRate = totals.totalCalls > 0 ? Math.round((totals.connectedCalls / totals.totalCalls) * 100) : 0;
+  const leadRate = totals.connectedCalls > 0 ? Math.round((totals.interestedLeads / totals.connectedCalls) * 100) : 0;
+  const convRate = totals.interestedLeads > 0 ? Math.round((totals.conversionsDone / totals.interestedLeads) * 100) : 0;
   const avgDealRevenue = totals.conversionsDone > 0 ? Math.round(totals.revenueGenerated / totals.conversionsDone) : 0;
 
   // Filtered records by search query

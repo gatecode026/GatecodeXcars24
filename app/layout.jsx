@@ -7,17 +7,7 @@ export const metadata = {
   title: "GatecodeXcars24 — Used-Car CRM & Operations Platform",
   description: "Used-Car CRM and Operations Platform for BPO management",
   icons: {
-    icon: [
-      { url: "/favicon.ico" },
-      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
-      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
-      { url: "/favicon.png", sizes: "256x256", type: "image/png" },
-      { url: "/favicon-circle.svg", type: "image/svg+xml" }
-    ],
-    apple: [
-      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }
-    ],
-    shortcut: "/favicon.ico"
+    icon: "/logo.jpg"
   }
 };
 
@@ -35,6 +25,23 @@ export default function RootLayout({ children }) {
         <link
           href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
           rel="stylesheet"
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.addEventListener('error', function(e) {
+                var msg = (e && e.message) ? e.message : '';
+                if (msg.indexOf('ChunkLoadError') !== -1 || msg.indexOf('Loading chunk') !== -1) {
+                  var last = sessionStorage.getItem('chunk_retry');
+                  var now = Date.now();
+                  if (!last || (now - Number(last)) > 6000) {
+                    sessionStorage.setItem('chunk_retry', String(now));
+                    window.location.reload();
+                  }
+                }
+              });
+            `
+          }}
         />
       </head>
       <body suppressHydrationWarning>

@@ -63,16 +63,20 @@ const EmployeeDashboardPage = () => {
     returnCount: 0,
     totalIncentive: 0,
     leadCount: 0,
-    callingStats: { totalCalls: 0, connectedCalls: 0, conversionsDone: 0, revenueGenerated: 0 }
+    callingCount: 0,
+    totalCallsDone: 0,
+    connectedCalls: 0,
+    conversionsDone: 0,
+    callingRevenue: 0
   });
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("today");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  const load = useCallback(async (f, sd, ed, isBackground = false) => {
+  const load = useCallback(async (f, sd, ed, silent = false) => {
     try {
-      if (!isBackground) setLoading(true);
+      if (!silent) setLoading(true);
       const params = { filter: f };
       if (f === "custom") {
         if (sd) params.startDate = sd;
@@ -86,23 +90,27 @@ const EmployeeDashboardPage = () => {
         returnCount: dData.returnCount || 0,
         totalIncentive: dData.totalIncentive || 0,
         leadCount: dData.leadCount || 0,
-        callingStats: dData.callingStats || { totalCalls: 0, connectedCalls: 0, conversionsDone: 0, revenueGenerated: 0 }
+        callingCount: dData.callingCount || 0,
+        totalCallsDone: dData.totalCallsDone || 0,
+        connectedCalls: dData.connectedCalls || 0,
+        conversionsDone: dData.conversionsDone || 0,
+        callingRevenue: dData.callingRevenue || 0
       });
     } catch {
-      // keep previous state if background
+      // Keep previous stats on error
     } finally {
-      if (!isBackground) setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     load(filter, startDate, endDate);
-  }, [filter, startDate, endDate, load]);
 
-  // Real-time live background polling & focus synchronization
-  useEffect(() => {
+    // Live background polling every 8s + focus listener (no manual refresh needed)
     const interval = setInterval(() => {
-      load(filter, startDate, endDate, true);
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        load(filter, startDate, endDate, true);
+      }
     }, 8000);
 
     const onFocus = () => load(filter, startDate, endDate, true);
@@ -128,16 +136,15 @@ const EmployeeDashboardPage = () => {
     <div className="content-area">
       <div className="page-header-row">
         <div className="page-title-box">
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <h1 style={{ margin: 0 }}>Executive Dashboard</h1>
-            <span className="badge-live-pulse">
-              <span className="badge-live-dot" /> Live Data
-            </span>
-          </div>
+          <h1>Executive Dashboard</h1>
           <p>Welcome back, <strong>{user?.name || "Executive"}</strong> • GatecodeXcars24 Operations</p>
         </div>
 
         <div className="page-actions-group">
+          <span className="badge-live-pulse">
+            <span className="badge-live-dot" />
+            LIVE SYNC
+          </span>
           <button className="btn btn-secondary" onClick={() => load(filter, startDate, endDate)}>
             <RefreshIcon />
             Refresh
@@ -184,100 +191,107 @@ const EmployeeDashboardPage = () => {
         )}
       </div>
 
-      {/* 6 KPI Cards Grid */}
+      {/* 6 High-Performance KPI Cards with Skeleton Loading */}
       <div className="kpi-grid">
-        {loading && stats.leadCount === 0 ? (
-          Array.from({ length: 6 }).map((_, i) => (
-            <div key={`skel-card-${i}`} className="skeleton-card">
-              <div className="skeleton-box" style={{ height: "20px", width: "40%" }} />
-              <div className="skeleton-box" style={{ height: "36px", width: "60%" }} />
-              <div className="skeleton-box" style={{ height: "14px", width: "75%" }} />
+        <div className="kpi-card">
+          <div className="kpi-top">
+            <div className="kpi-icon-wrap cyan">
+              <UsersIcon />
             </div>
-          ))
-        ) : (
-          <>
-            <div className="kpi-card">
-              <div className="kpi-top">
-                <div className="kpi-icon-wrap cyan">
-                  <UsersIcon />
-                </div>
-                <span className="kpi-pill positive">Active</span>
-              </div>
-              <div className="kpi-label">Your Customer Leads</div>
-              <div className="kpi-value">{stats.leadCount}</div>
-              <div className="kpi-subtext">Total leads generated &amp; assigned</div>
-            </div>
+            <span className="kpi-pill positive">Active</span>
+          </div>
+          <div className="kpi-label">Your Customer Leads</div>
+          <div className="kpi-value">
+            {loading ? <span className="skeleton-box" style={{ width: "60px", height: "28px" }} /> : stats.leadCount}
+          </div>
+          <div className="kpi-subtext">Total leads generated &amp; assigned</div>
+        </div>
 
-            <div className="kpi-card">
-              <div className="kpi-top">
-                <div className="kpi-icon-wrap blue">
-                  <CarIcon />
-                </div>
-                <span className="kpi-pill info">Purchased</span>
-              </div>
-              <div className="kpi-label">Cars Processed</div>
-              <div className="kpi-value">{stats.orderCount}</div>
-              <div className="kpi-subtext">Vehicle purchases booked</div>
+        <div className="kpi-card">
+          <div className="kpi-top">
+            <div className="kpi-icon-wrap purple">
+              <PhoneCallIcon />
             </div>
+            <span className="kpi-pill info">Calling</span>
+          </div>
+          <div className="kpi-label">Calls Done &amp; Connected</div>
+          <div className="kpi-value">
+            {loading ? (
+              <span className="skeleton-box" style={{ width: "80px", height: "28px" }} />
+            ) : (
+              <span>
+                {stats.totalCallsDone} <small style={{ fontSize: "14px", color: "var(--text-muted)", fontWeight: 500 }}>({stats.connectedCalls} connected)</small>
+              </span>
+            )}
+          </div>
+          <div className="kpi-subtext">From {stats.callingCount} calling report records</div>
+        </div>
 
-            <div className="kpi-card">
-              <div className="kpi-top">
-                <div className="kpi-icon-wrap purple">
-                  <PhoneCallIcon />
-                </div>
-                <span className="kpi-pill info">Calls</span>
-              </div>
-              <div className="kpi-label">Calls Done / Connected</div>
-              <div className="kpi-value">
-                {stats.callingStats?.totalCalls || 0}
-                <span style={{ fontSize: "14px", fontWeight: 500, color: "var(--text-muted)", marginLeft: "6px" }}>
-                  ({stats.callingStats?.connectedCalls || 0} conn)
-                </span>
-              </div>
-              <div className="kpi-subtext">Total calls dialed &amp; engaged</div>
+        <div className="kpi-card">
+          <div className="kpi-top">
+            <div className="kpi-icon-wrap green">
+              <TargetIcon />
             </div>
+            <span className="kpi-pill positive">Converted</span>
+          </div>
+          <div className="kpi-label">Calling Conversions &amp; Revenue</div>
+          <div className="kpi-value">
+            {loading ? (
+              <span className="skeleton-box" style={{ width: "100px", height: "28px" }} />
+            ) : (
+              <span>
+                {stats.conversionsDone} <small style={{ fontSize: "14px", color: "#16a34a", fontWeight: 700 }}>(₹{Number(stats.callingRevenue || 0).toLocaleString("en-IN")})</small>
+              </span>
+            )}
+          </div>
+          <div className="kpi-subtext">Direct telecalling conversions</div>
+        </div>
 
-            <div className="kpi-card">
-              <div className="kpi-top">
-                <div className="kpi-icon-wrap emerald">
-                  <TargetIcon />
-                </div>
-                <span className="kpi-pill positive">Deals</span>
-              </div>
-              <div className="kpi-label">Call Conversions</div>
-              <div className="kpi-value">{stats.callingStats?.conversionsDone || 0}</div>
-              <div className="kpi-subtext">Deals successfully closed via telecalling</div>
+        <div className="kpi-card">
+          <div className="kpi-top">
+            <div className="kpi-icon-wrap blue">
+              <CarIcon />
             </div>
+            <span className="kpi-pill info">Purchased</span>
+          </div>
+          <div className="kpi-label">Cars Processed</div>
+          <div className="kpi-value">
+            {loading ? <span className="skeleton-box" style={{ width: "60px", height: "28px" }} /> : stats.orderCount}
+          </div>
+          <div className="kpi-subtext">Vehicle purchases booked</div>
+        </div>
 
-            <div className="kpi-card">
-              <div className="kpi-top">
-                <div className="kpi-icon-wrap amber">
-                  <RefreshIcon />
-                </div>
-                <span className="kpi-pill warning">Returns</span>
-              </div>
-              <div className="kpi-label">Returns / Issues</div>
-              <div className="kpi-value">{stats.returnCount}</div>
-              <div className="kpi-subtext">Customer complaints or returns</div>
+        <div className="kpi-card">
+          <div className="kpi-top">
+            <div className="kpi-icon-wrap amber">
+              <RefreshIcon />
             </div>
+            <span className="kpi-pill warning">Returns</span>
+          </div>
+          <div className="kpi-label">Returns / Issues</div>
+          <div className="kpi-value">
+            {loading ? <span className="skeleton-box" style={{ width: "60px", height: "28px" }} /> : stats.returnCount}
+          </div>
+          <div className="kpi-subtext">Customer complaints or returns</div>
+        </div>
 
-            <div className="kpi-card">
-              <div className="kpi-top">
-                <div className="kpi-icon-wrap purple">
-                  <RupeeIcon />
-                </div>
-                <span className="kpi-pill positive">Earned</span>
-              </div>
-              <div className="kpi-label">Total Incentive</div>
-              <div className="kpi-value">
-                ₹{Number(stats.totalIncentive || 0).toLocaleString("en-IN")}
-              </div>
-              <div className="kpi-subtext">
-                Approved payout {stats.callingStats?.revenueGenerated > 0 ? `• ₹${stats.callingStats.revenueGenerated.toLocaleString("en-IN")} rev` : ""}
-              </div>
+        <div className="kpi-card">
+          <div className="kpi-top">
+            <div className="kpi-icon-wrap purple">
+              <RupeeIcon />
             </div>
-          </>
-        )}
+            <span className="kpi-pill positive">Earned</span>
+          </div>
+          <div className="kpi-label">Total Incentive</div>
+          <div className="kpi-value">
+            {loading ? (
+              <span className="skeleton-box" style={{ width: "110px", height: "28px" }} />
+            ) : (
+              `₹${Number(stats.totalIncentive || 0).toLocaleString("en-IN")}`
+            )}
+          </div>
+          <div className="kpi-subtext">Approved incentive payouts</div>
+        </div>
       </div>
     </div>
   );

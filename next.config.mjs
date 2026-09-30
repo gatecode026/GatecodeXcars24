@@ -12,11 +12,16 @@ const nextConfig = {
       "react-router-dom": path.resolve(__dirname, "src/compat/react-router-dom.jsx")
     }
   },
-  webpack: (config) => {
+  webpack: (config, { dev }) => {
     config.resolve.alias = {
       ...config.resolve.alias,
       "react-router-dom": path.resolve(__dirname, "src/compat/react-router-dom.jsx")
     };
+    if (dev) {
+      config.cache = {
+        type: "memory"
+      };
+    }
     return config;
   },
   serverExternalPackages: ["mongoose", "bcryptjs"],

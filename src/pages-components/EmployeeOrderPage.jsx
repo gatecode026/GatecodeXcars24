@@ -3,11 +3,55 @@ import { useMemo, useState, useCallback, useEffect } from "react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { api, toAbsoluteAssetUrl } from "../api/client";
-import Field from "../components/Field";
 import Toast from "../components/Toast";
 import CsvImportModal from "../components/CsvImportModal";
 import { exportTableToCsv } from "../utils/csvHelper";
 import { isValidMobile, isValidPincode } from "../utils/validators";
+
+const PlusIcon = () => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
+
+const SearchIcon = () => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="8" />
+    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+  </svg>
+);
+
+const DownloadIcon = () => (
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+);
+
+const UploadIcon = () => (
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="17 8 12 3 7 8" />
+    <line x1="12" y1="3" x2="12" y2="15" />
+  </svg>
+);
+
+const CloseIcon = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+);
+
+const RefreshIcon = () => (
+  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="23 4 23 10 17 10" />
+    <polyline points="1 20 1 14 7 14" />
+    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+  </svg>
+);
 
 const initialState = {
   customerName: "",
@@ -25,6 +69,7 @@ const initialState = {
   trackingId: "",
   courierCompany: "",
   bankName: "",
+  orderStatus: "Pending",
 };
 
 const allowedImageTypes = ["image/jpeg", "image/jpg", "image/png"];
@@ -33,9 +78,43 @@ const maxFileSize = 2 * 1024 * 1024;
 const formatDateTime = (dateString) => {
   if (!dateString) return "-";
   return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit", month: "short", year: "numeric",
-    hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Kolkata",
   }).format(new Date(dateString));
+};
+
+const statusBadge = (status) => {
+  const styles = {
+    Approved: { bg: "#dcfce7", text: "#16a34a", border: "#bbf7d0" },
+    Delivered: { bg: "#dcfce7", text: "#16a34a", border: "#bbf7d0" },
+    Processing: { bg: "#e0f2fe", text: "#0284c7", border: "#bae6fd" },
+    Pending: { bg: "#fef3c7", text: "#d97706", border: "#fde68a" },
+    Cancelled: { bg: "#fee2e2", text: "#dc2626", border: "#fecaca" },
+  };
+  const current = styles[status] || { bg: "#f1f5f9", text: "#64748b", border: "#e2e8f0" };
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "3px 10px",
+        borderRadius: "20px",
+        fontSize: "11px",
+        fontWeight: 600,
+        background: current.bg,
+        color: current.text,
+        border: `1px solid ${current.border}`,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {status || "Pending"}
+    </span>
+  );
 };
 
 const downloadOrdersPDF = (orders) => {
@@ -45,7 +124,7 @@ const downloadOrdersPDF = (orders) => {
 
   doc.setFontSize(18);
   doc.setFont("helvetica", "bold");
-  doc.text("Recent Orders Report", pageWidth / 2, y, { align: "center" });
+  doc.text("GatecodeXcars24 — Orders Report", pageWidth / 2, y, { align: "center" });
   y += 8;
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
@@ -59,18 +138,18 @@ const downloadOrdersPDF = (orders) => {
     body: orders.map((o) => [
       o.customerName || "-",
       o.mobileNumber || "-",
-      o.productType === "Custom" ? o.customProductName : o.productType,
+      o.productType === "Other" ? o.customProductName : o.productType,
       o.numberOfUnits || 0,
-      `Rs. ${o.totalAmount || 0}`,
+      `Rs. ${Number(o.totalAmount || 0).toLocaleString("en-IN")}`,
       o.orderStatus || "-",
-      o.createdAt ? new Date(o.createdAt).toLocaleDateString("en-IN") : "-"
+      o.createdAt ? new Date(o.createdAt).toLocaleDateString("en-IN") : "-",
     ]),
-    headStyles: { fillColor: [139, 92, 246], fontSize: 9, fontStyle: "bold" },
+    headStyles: { fillColor: [2, 132, 199], textColor: [255, 255, 255], fontSize: 9, fontStyle: "bold" },
     bodyStyles: { fontSize: 8 },
-    styles: { cellPadding: 2 }
+    styles: { cellPadding: 2 },
   });
 
-  doc.save("Orders_Report.pdf");
+  doc.save(`Orders_Report_${new Date().toISOString().split("T")[0]}.pdf`);
 };
 
 const EmployeeOrderPage = () => {
@@ -85,6 +164,7 @@ const EmployeeOrderPage = () => {
   const [form, setForm] = useState(initialState);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [viewOrder, setViewOrder] = useState(null);
   const [paymentFile, setPaymentFile] = useState(null);
@@ -97,12 +177,49 @@ const EmployeeOrderPage = () => {
   const [orderDateTo, setOrderDateTo] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState("today");
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
+
+  const fetchRecent = useCallback(async (isBackground = false) => {
+    try {
+      if (!isBackground) setInitialLoading(true);
+      const res = await api.get("/employee/orders");
+      setRecentOrders(res.data?.data || []);
+    } catch {
+      // silent
+    } finally {
+      if (!isBackground) setInitialLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRecent(false);
+    const interval = setInterval(() => {
+      fetchRecent(true);
+    }, 8000);
+    const onFocus = () => fetchRecent(true);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [fetchRecent]);
+
+  useEffect(() => {
+    if (isFormOpen || viewOrder) {
+      document.body.classList.add("modal-open");
+    } else {
+      document.body.classList.remove("modal-open");
+    }
+    return () => {
+      document.body.classList.remove("modal-open");
+    };
+  }, [isFormOpen, viewOrder]);
 
   const filteredOrders = useMemo(() => {
     let list = recentOrders;
     if (orderSearch.trim()) {
       const q = orderSearch.trim().toLowerCase();
-      list = list.filter((o) => o.customerName?.toLowerCase().includes(q) || o.mobileNumber?.includes(q));
+      list = list.filter((o) => o.customerName?.toLowerCase().includes(q) || o.mobileNumber?.includes(q) || o.productType?.toLowerCase().includes(q));
     }
 
     const now = new Date();
@@ -166,18 +283,6 @@ const EmployeeOrderPage = () => {
     return (amount - 3200) * units;
   }, [form.numberOfUnits, form.amount]);
 
-  const formatCurrency = (value) =>
-    new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 2,
-    }).format(Number(value || 0));
-
-  const getFieldClass = (key) => {
-    if (!form[key]) return "";
-    return errors[key] ? "field-invalid" : "field-valid";
-  };
-
   const sanitizeDigits = (value, max) => value.replace(/\D/g, "").slice(0, max);
   const sanitizeLetters = (value) => value.replace(/[^a-zA-Z\s]/g, "");
   const sanitizePositiveNumber = (value) => {
@@ -211,9 +316,6 @@ const EmployeeOrderPage = () => {
       next.advanceAmount = "Advance amount cannot exceed total amount";
     }
     setErrors(next);
-    if (Object.keys(next).length) {
-      setTimeout(() => document.querySelector(".field-invalid")?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
-    }
     return Object.keys(next).length === 0;
   };
 
@@ -249,62 +351,26 @@ const EmployeeOrderPage = () => {
 
   const clearToast = useCallback(() => setToast(null), []);
 
-  const fetchRecent = useCallback(async (isBackground = false) => {
-    try {
-      if (!isBackground) setLoading(true);
-      const res = await api.get("/employee/orders");
-      setRecentOrders(res.data?.data || []);
-    } catch {
-      // silent
-    } finally {
-      if (!isBackground) setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchRecent();
-    const interval = setInterval(() => {
-      fetchRecent(true);
-    }, 8000);
-    const onFocus = () => fetchRecent(true);
-    window.addEventListener("focus", onFocus);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [fetchRecent]);
-
-  useEffect(() => {
-    if (isFormOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [isFormOpen]);
-
-  const handleEditOrder = (order) => {
+  const handleEditOrder = (o) => {
     setForm({
-      customerName: order.customerName || "",
-      mobileNumber: order.mobileNumber || "",
-      alternateMobileNumber: order.alternateMobileNumber || "",
-      fullAddress: order.fullAddress || "",
-      pincode: order.pincode || "",
-      productType: order.productType || "GPS",
-      customProductName: order.customProductName || "",
-      numberOfUnits: order.numberOfUnits || "",
-      amount: order.amount || "",
-      advanceAmount: order.advanceAmount || "",
-      description: order.description || "",
-      parcelStatus: order.parcelStatus || "Pending",
-      trackingId: order.trackingId || "",
-      courierCompany: order.courierCompany || "",
-      bankName: order.bankName || "",
-      orderStatus: order.orderStatus || "Pending",
+      customerName: o.customerName || "",
+      mobileNumber: o.mobileNumber || "",
+      alternateMobileNumber: o.alternateMobileNumber || "",
+      fullAddress: o.fullAddress || "",
+      pincode: o.pincode || "",
+      productType: o.productType || "GPS",
+      customProductName: o.customProductName || "",
+      numberOfUnits: o.numberOfUnits || "",
+      amount: o.amount || "",
+      advanceAmount: o.advanceAmount || "",
+      description: o.description || "",
+      parcelStatus: o.parcelStatus || "Pending",
+      trackingId: o.trackingId || "",
+      courierCompany: o.courierCompany || "",
+      bankName: o.bankName || "",
+      orderStatus: o.orderStatus || "Pending",
     });
-    setEditingId(order._id);
+    setEditingId(o._id);
     setIsFormOpen(true);
   };
 
@@ -313,13 +379,11 @@ const EmployeeOrderPage = () => {
     try {
       await api.delete(`/employee/orders/${order._id}`);
       setToast("Order deleted successfully!");
-      fetchRecent();
+      fetchRecent(true);
     } catch {
       setToast("Failed to delete order");
     }
   };
-
-  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
 
   const handleExportCSV = () => {
     if (!recentOrders || recentOrders.length === 0) {
@@ -340,7 +404,7 @@ const EmployeeOrderPage = () => {
       "Parcel Status",
       "Tracking ID",
       "Courier Company",
-      "Date"
+      "Date",
     ];
     const rows = recentOrders.map((o) => [
       o.customerName || "-",
@@ -356,16 +420,16 @@ const EmployeeOrderPage = () => {
       o.parcelStatus || "Pending",
       o.trackingId || "-",
       o.courierCompany || "-",
-      o.createdAt ? new Date(o.createdAt).toISOString().split("T")[0] : "-"
+      o.createdAt ? new Date(o.createdAt).toISOString().split("T")[0] : "-",
     ]);
-    exportTableToCsv(`My_Orders_${new Date().toISOString().split("T")[0]}.csv`, headers, rows);
+    exportTableToCsv(`Orders_${new Date().toISOString().split("T")[0]}.csv`, headers, rows);
     setToast("Orders exported to CSV");
   };
 
   const handleImportOrders = async (rows) => {
     const res = await api.post("/orders/bulk-import", { rows });
     setToast(res.data?.message || `Imported ${rows.length} orders successfully!`);
-    fetchRecent();
+    fetchRecent(true);
   };
 
   const onSubmit = async (e) => {
@@ -391,6 +455,7 @@ const EmployeeOrderPage = () => {
       payload.append("courierCompany", form.courierCompany);
       payload.append("bankName", form.bankName);
       if (paymentFile) payload.append("paymentScreenshot", paymentFile);
+
       if (editingId) {
         await api.put(`/employee/orders/${editingId}`, {
           customerName: form.customerName,
@@ -424,7 +489,7 @@ const EmployeeOrderPage = () => {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPreviewUrl("");
       setUploadState("");
-      fetchRecent();
+      fetchRecent(true);
     } catch (error) {
       setToast(error.response?.data?.message || "Failed to submit order");
     } finally {
@@ -433,39 +498,42 @@ const EmployeeOrderPage = () => {
   };
 
   return (
-    <section className="form-page">
-      <div className="form-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div>
+    <div className="content-area">
+      {/* Page Header */}
+      <div className="page-header-row">
+        <div className="page-title-box">
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <h2 style={{ margin: 0 }}>Orders</h2>
-            <span className="badge-live-pulse">
-              <span className="badge-live-dot" /> Live
+            <h1>Orders</h1>
+            <span className="badge-live-pulse" title="Real-time syncing enabled">
+              <span className="badge-live-dot" /> LIVE
             </span>
           </div>
-          <p className="form-subtitle">View and manage your order submissions</p>
+          <p>View and manage customer purchase orders and dispatches</p>
         </div>
-        <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+
+        <div className="page-actions-group">
           <button
             type="button"
-            className="secondary-btn"
+            className="btn btn-secondary"
             onClick={() => setIsCsvModalOpen(true)}
-            style={{ padding: "8px 14px", fontSize: 13, display: "inline-flex", gap: "6px", alignItems: "center" }}
             title="Import Orders from CSV"
           >
+            <UploadIcon />
             Import CSV
           </button>
           <button
             type="button"
-            className="secondary-btn"
+            className="btn btn-secondary"
             onClick={handleExportCSV}
-            disabled={recentOrders.length === 0}
-            style={{ padding: "8px 14px", fontSize: 13, display: "inline-flex", gap: "6px", alignItems: "center" }}
+            disabled={filteredOrders.length === 0}
             title="Export Orders to CSV"
           >
+            <DownloadIcon />
             Export CSV
           </button>
           <button
-            className="primary-btn"
+            type="button"
+            className="btn btn-primary"
             onClick={() => {
               setForm(initialState);
               setEditingId(null);
@@ -476,232 +544,629 @@ const EmployeeOrderPage = () => {
               setIsFormOpen(true);
             }}
           >
-            + Create Order
+            <PlusIcon />
+            Create Order
           </button>
         </div>
       </div>
 
+      {/* Main Table Card */}
+      <div className="table-card">
+        {/* Table Header Bar with Filters */}
+        <div className="table-header-bar" style={{ flexWrap: "wrap", gap: "10px" }}>
+          <div className="filter-period-pills" style={{ display: "flex", gap: "4px" }}>
+            {[
+              { key: "today", label: "Today" },
+              { key: "yesterday", label: "Yesterday" },
+              { key: "week", label: "This Week" },
+              { key: "month", label: "This Month" },
+              { key: "custom", label: "Custom Range" },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                className={`filter-pill ${dateFilter === key ? "active" : ""}`}
+                onClick={() => setDateFilter(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {dateFilter === "custom" && (
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <input
+                type="date"
+                className="form-control"
+                style={{ width: "auto", height: "32px", padding: "2px 8px", fontSize: "12px" }}
+                value={orderDateFrom}
+                max={today}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setOrderDateFrom(val);
+                  if (orderDateTo && val > orderDateTo) setOrderDateTo("");
+                }}
+              />
+              <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>to</span>
+              <input
+                type="date"
+                className="form-control"
+                style={{ width: "auto", height: "32px", padding: "2px 8px", fontSize: "12px" }}
+                value={orderDateTo}
+                min={orderDateFrom}
+                max={today}
+                onChange={(e) => setOrderDateTo(e.target.value)}
+              />
+            </div>
+          )}
+
+          <div className="table-search-input" style={{ marginLeft: "auto", minWidth: "220px" }}>
+            <SearchIcon />
+            <input
+              type="text"
+              placeholder="Search by customer, mobile, product..."
+              value={orderSearch}
+              onChange={(e) => setOrderSearch(e.target.value)}
+            />
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => fetchRecent(false)}
+            title="Refresh records"
+          >
+            <RefreshIcon />
+            Refresh
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm"
+            style={{ background: "#10b981", color: "#ffffff", border: "1px solid #10b981", display: "inline-flex", alignItems: "center", gap: "6px" }}
+            onClick={() => downloadOrdersPDF(filteredOrders)}
+            title="Download PDF Report"
+          >
+            <DownloadIcon />
+            Download PDF
+          </button>
+        </div>
+
+        {/* Table Container */}
+        <div className="table-container">
+          <table className="leads-table slidable-table">
+            <thead>
+              <tr>
+                <th>CUSTOMER</th>
+                <th>MOBILE</th>
+                <th>PRODUCT</th>
+                <th>UNITS</th>
+                <th>TOTAL</th>
+                <th>STATUS</th>
+                <th>DATE</th>
+                <th style={{ textAlign: "center" }}>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {initialLoading ? (
+                Array.from({ length: 5 }).map((_, idx) => (
+                  <tr key={`skel-${idx}`}>
+                    <td><div className="skeleton-box" style={{ width: "120px", height: "14px" }} /></td>
+                    <td><div className="skeleton-box" style={{ width: "90px", height: "14px" }} /></td>
+                    <td><div className="skeleton-box" style={{ width: "80px", height: "14px" }} /></td>
+                    <td><div className="skeleton-box" style={{ width: "30px", height: "14px" }} /></td>
+                    <td><div className="skeleton-box" style={{ width: "80px", height: "14px" }} /></td>
+                    <td><div className="skeleton-box" style={{ width: "70px", height: "20px", borderRadius: "10px" }} /></td>
+                    <td><div className="skeleton-box" style={{ width: "100px", height: "14px" }} /></td>
+                    <td style={{ textAlign: "center" }}><div className="skeleton-box" style={{ width: "60px", height: "24px", margin: "0 auto" }} /></td>
+                  </tr>
+                ))
+              ) : filteredOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: "center", color: "var(--text-muted)", padding: "36px 16px" }}>
+                    <div style={{ fontSize: "14px", fontWeight: 500 }}>No matching orders found</div>
+                    <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
+                      Create a new customer order or adjust your date filter.
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredOrders.map((o) => (
+                  <tr key={o._id}>
+                    <td style={{ fontWeight: 600, color: "var(--text-heading)" }}>{o.customerName}</td>
+                    <td>
+                      <span style={{ fontFamily: "monospace", fontSize: "12.5px" }}>{o.mobileNumber}</span>
+                    </td>
+                    <td>
+                      <span className="badge badge-gray" style={{ fontSize: "11px" }}>
+                        {o.productType === "Other" && o.customProductName ? o.customProductName : o.productType}
+                      </span>
+                    </td>
+                    <td style={{ fontWeight: 600 }}>{o.numberOfUnits}</td>
+                    <td style={{ fontWeight: 600, color: "var(--text-heading)" }}>
+                      ₹{Number(o.totalAmount || 0).toLocaleString("en-IN")}
+                    </td>
+                    <td>{statusBadge(o.orderStatus)}</td>
+                    <td style={{ fontSize: "12px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                      {formatDateTime(o.createdAt)}
+                    </td>
+                    <td style={{ textAlign: "center" }}>
+                      <div style={{ display: "flex", gap: "6px", justifyContent: "center", alignItems: "center" }}>
+                        <button
+                          type="button"
+                          className="btn-icon"
+                          title="View Details"
+                          onClick={() => setViewOrder(o)}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            cursor: "pointer",
+                            padding: "5px",
+                            borderRadius: "6px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            color: "#0284c7",
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-icon"
+                          title="Edit"
+                          onClick={() => handleEditOrder(o)}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            cursor: "pointer",
+                            padding: "5px",
+                            borderRadius: "6px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            color: "#f59e0b",
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-icon"
+                          title="Delete"
+                          onClick={() => handleDeleteOrder(o)}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            cursor: "pointer",
+                            padding: "5px",
+                            borderRadius: "6px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            color: "#ef4444",
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                            <line x1="10" y1="11" x2="10" y2="17" />
+                            <line x1="14" y1="11" x2="14" y2="17" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Modern Modal: Create / Edit Order */}
       {isFormOpen && (
-        <div className="modal-overlay" onClick={() => { setIsFormOpen(false); setForm(initialState); setEditingId(null); setErrors({}); }}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "800px", width: "95%", maxHeight: "90vh", overflowY: "auto" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <h3 className="modal-title" style={{ margin: 0 }}>{editingId ? "Edit Order" : "Create New Order"}</h3>
+        <div
+          className="modal-backdrop"
+          onClick={() => {
+            setIsFormOpen(false);
+            setForm(initialState);
+            setEditingId(null);
+            setErrors({});
+          }}
+        >
+          <div
+            className="modal-card modal-lg"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: "860px", width: "95%" }}
+          >
+            <div className="modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span className="badge badge-blue" style={{ fontSize: "11px", fontWeight: 700 }}>
+                  {editingId ? "EDIT ORDER" : "NEW ORDER"}
+                </span>
+                <h3 style={{ fontSize: "16px", fontWeight: 700, margin: 0 }}>
+                  {editingId ? "Edit Customer Order" : "Create New Customer Order"}
+                </h3>
+              </div>
               <button
                 type="button"
-                className="secondary-btn"
+                className="modal-close-btn"
                 onClick={() => {
                   setIsFormOpen(false);
                   setForm(initialState);
                   setEditingId(null);
                   setErrors({});
                 }}
-                style={{ padding: "6px 14px", fontSize: 12 }}
               >
-                Close
+                <CloseIcon />
               </button>
             </div>
-            <form className="modern-form" onSubmit={onSubmit}>
-              <div className="form-section">
-                <h3 className="form-section-title">Customer Information</h3>
-                <div className="form-section-content">
-                  <Field label="Customer Name" error={errors.customerName}>
-                    <input
-                      className={getFieldClass("customerName")}
-                      placeholder="Enter customer name"
-                      value={form.customerName}
-                      onChange={(e) => onChange("customerName", sanitizeLetters(e.target.value))}
-                    />
-                  </Field>
-                  <Field label="Mobile Number" error={errors.mobileNumber}>
-                    <input
-                      className={getFieldClass("mobileNumber")}
-                      placeholder="10-digit number"
-                      inputMode="numeric"
-                      maxLength={10}
-                      value={form.mobileNumber}
-                      onKeyDown={preventNonNumericKey}
-                      onChange={(e) => onChange("mobileNumber", sanitizeDigits(e.target.value, 10))}
-                    />
-                  </Field>
-                  <Field label="Alternate Mobile (Optional)" error={errors.alternateMobileNumber}>
-                    <input
-                      className={getFieldClass("alternateMobileNumber")}
-                      placeholder="10-digit number"
-                      inputMode="numeric"
-                      maxLength={10}
-                      value={form.alternateMobileNumber}
-                      onKeyDown={preventNonNumericKey}
-                      onChange={(e) => onChange("alternateMobileNumber", sanitizeDigits(e.target.value, 10))}
-                    />
-                  </Field>
-                  <Field label="Full Address" error={errors.fullAddress}>
+
+            <form onSubmit={onSubmit}>
+              <div className="modal-body modal-body-compact">
+                {/* 1. Customer Information */}
+                <div className="compact-section-box">
+                  <div className="compact-section-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
+                    </svg>
+                    <span>1. Customer Information</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 0.8fr", gap: "10px" }}>
+                    <div className="form-group">
+                      <label className="form-label">Customer Name *</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. Rahul Sharma"
+                        required
+                        value={form.customerName}
+                        onChange={(e) => onChange("customerName", sanitizeLetters(e.target.value))}
+                      />
+                      {errors.customerName && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.customerName}</small>}
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Mobile Number *</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="10-digit number"
+                        inputMode="numeric"
+                        maxLength={10}
+                        required
+                        value={form.mobileNumber}
+                        onKeyDown={preventNonNumericKey}
+                        onChange={(e) => onChange("mobileNumber", sanitizeDigits(e.target.value, 10))}
+                      />
+                      {errors.mobileNumber && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.mobileNumber}</small>}
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Alternate Mobile</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Optional"
+                        inputMode="numeric"
+                        maxLength={10}
+                        value={form.alternateMobileNumber}
+                        onKeyDown={preventNonNumericKey}
+                        onChange={(e) => onChange("alternateMobileNumber", sanitizeDigits(e.target.value, 10))}
+                      />
+                      {errors.alternateMobileNumber && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.alternateMobileNumber}</small>}
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Pincode *</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="6 digits"
+                        inputMode="numeric"
+                        maxLength={6}
+                        required
+                        value={form.pincode}
+                        onKeyDown={preventNonNumericKey}
+                        onChange={(e) => onChange("pincode", sanitizeDigits(e.target.value, 6))}
+                      />
+                      {errors.pincode && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.pincode}</small>}
+                    </div>
+                  </div>
+
+                  <div className="form-group" style={{ marginTop: "4px" }}>
+                    <label className="form-label">Full Delivery Address *</label>
                     <textarea
-                      className={getFieldClass("fullAddress")}
-                      placeholder="Enter complete address"
+                      className="form-control"
+                      placeholder="Enter complete building, street, landmark, city and state..."
+                      required
+                      rows={2}
                       value={form.fullAddress}
                       onChange={(e) => onChange("fullAddress", e.target.value)}
                     />
-                  </Field>
-                  <Field label="Pincode" error={errors.pincode}>
-                    <input
-                      className={getFieldClass("pincode")}
-                      placeholder="6-digit pincode"
-                      inputMode="numeric"
-                      maxLength={6}
-                      value={form.pincode}
-                      onKeyDown={preventNonNumericKey}
-                      onChange={(e) => onChange("pincode", sanitizeDigits(e.target.value, 6))}
-                    />
-                  </Field>
+                    {errors.fullAddress && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.fullAddress}</small>}
+                  </div>
                 </div>
-              </div>
 
-              <div className="form-section">
-                <h3 className="form-section-title">Product Information</h3>
-                <div className="form-section-content">
-                  <Field label="Product Type">
-                    <select value={form.productType} onChange={(e) => onChange("productType", e.target.value)}>
-                      <option>GPS</option>
-                      <option>Vending Machine</option>
-                      <option>Disposal</option>
-                      <option>Other</option>
-                    </select>
-                  </Field>
-                  {form.productType === "Other" && (
-                    <Field label="Custom Product Name" error={errors.customProductName}>
-                      <input
-                        className={getFieldClass("customProductName")}
-                        placeholder="Enter product name"
-                        value={form.customProductName}
-                        onChange={(e) => onChange("customProductName", e.target.value)}
-                      />
-                    </Field>
-                  )}
-                  <Field label="Number of Units" error={errors.numberOfUnits}>
-                    <input
-                      className={getFieldClass("numberOfUnits")}
-                      placeholder="How many units?"
-                      inputMode="numeric"
-                      value={form.numberOfUnits}
-                      onKeyDown={preventNonNumericKey}
-                      onChange={(e) => onChange("numberOfUnits", sanitizeDigits(e.target.value, 6))}
-                    />
-                  </Field>
-                  <Field label="Amount per Unit" error={errors.amount}>
-                    <input
-                      className={getFieldClass("amount")}
-                      placeholder="Enter amount"
-                      inputMode="decimal"
-                      value={form.amount}
-                      onChange={(e) => onChange("amount", sanitizePositiveNumber(e.target.value))}
-                    />
-                  </Field>
-                </div>
-              </div>
-
-              <div className="form-section">
-                <h3 className="form-section-title">Order Summary</h3>
-                <div className="form-section-content">
-                  <Field label="Total Amount">
-                    <input readOnly value={formatCurrency(totalAmount)} className="readonly-input summary-value" />
-                  </Field>
-                  <Field label="Incentive">
-                    <input readOnly value={formatCurrency(incentive)} className="readonly-input summary-value" />
-                  </Field>
-                  <Field label="Advance Amount" error={errors.advanceAmount}>
-                    <input
-                      className={getFieldClass("advanceAmount")}
-                      placeholder="Enter advance amount"
-                      inputMode="decimal"
-                      value={form.advanceAmount}
-                      onChange={(e) => onChange("advanceAmount", sanitizePositiveNumber(e.target.value))}
-                    />
-                  </Field>
-                  <Field label="Remaining Amount">
-                    <input readOnly value={formatCurrency(Math.max(0, totalAmount - Number(form.advanceAmount || 0)))} className="readonly-input summary-value" />
-                  </Field>
-                </div>
-              </div>
-
-              <div className="form-section">
-                <h3 className="form-section-title">Additional Details</h3>
-                <div className="form-section-content">
-                  <Field label="Bank Name" error={errors.bankName}>
-                    <select className={getFieldClass("bankName")} value={form.bankName} onChange={(e) => onChange("bankName", e.target.value)}>
-                      <option value="">Select Bank</option>
-                      <option value="SBI">SBI</option>
-                      <option value="BOB">BOB</option>
-                      <option value="BOM">BOM</option>
-                      <option value="MGB">MGB</option>
-                      <option value="UPGB">UPGB</option>
-                      <option value="MPGB">MPGB</option>
-                    </select>
-                  </Field>
-                  <Field label="Description">
-                    <textarea
-                      value={form.description}
-                      onChange={(e) => onChange("description", e.target.value)}
-                      placeholder="Enter any additional order details or notes..."
-                      rows={3}
-                    />
-                  </Field>
-                  <Field label="Parcel Status">
-                    <select value={form.parcelStatus} onChange={(e) => onChange("parcelStatus", e.target.value)}>
-                      <option value="Pending">Pending</option>
-                      <option value="Process">Process</option>
-                      <option value="Parcel">Parcel</option>
-                      <option value="Packed">Packed</option>
-                      <option value="Dispatched">Dispatched</option>
-                      <option value="Delivered">Delivered</option>
-                    </select>
-                  </Field>
-                  <Field label="Tracking ID">
-                    <input
-                      placeholder="Enter tracking ID"
-                      value={form.trackingId}
-                      onChange={(e) => onChange("trackingId", e.target.value)}
-                    />
-                  </Field>
-                  <Field label="Courier Company">
-                    <input
-                      placeholder="Enter courier company name"
-                      value={form.courierCompany}
-                      onChange={(e) => onChange("courierCompany", e.target.value)}
-                    />
-                  </Field>
-                  <Field label="Payment Screenshot (Optional)" error={errors.paymentScreenshot}>
-                    <div className={`upload-box ${errors.paymentScreenshot ? "upload-error" : paymentFile ? "upload-ok" : ""}`}>
-                      <input
-                        type="file"
-                        accept=".jpg,.jpeg,.png,image/jpeg,image/png"
-                        onChange={(e) => handleScreenshot(e.target.files?.[0])}
-                      />
-                      <p>Upload JPG, JPEG, PNG (max 2MB)</p>
-                      {uploadState && <small className="upload-state">{uploadState}</small>}
+                {/* 2. Product & Order Financials */}
+                <div className="compact-section-box">
+                  <div className="compact-section-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <circle cx="9" cy="21" r="1" />
+                      <circle cx="20" cy="21" r="1" />
+                      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                    </svg>
+                    <span>2. Product &amp; Order Financials</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: form.productType === "Other" ? "1fr 1fr 0.8fr 1fr" : "1.2fr 0.8fr 1fr", gap: "10px" }}>
+                    <div className="form-group">
+                      <label className="form-label">Product Type *</label>
+                      <select
+                        className="form-control"
+                        value={form.productType}
+                        onChange={(e) => onChange("productType", e.target.value)}
+                      >
+                        <option value="GPS">GPS</option>
+                        <option value="Vending Machine">Vending Machine</option>
+                        <option value="Disposal">Disposal</option>
+                        <option value="Other">Other</option>
+                      </select>
                     </div>
-                    {previewUrl && (
-                      <div className="upload-preview">
-                        <img src={previewUrl} alt="Payment preview" />
-                        <button type="button" onClick={removeScreenshot}>Remove</button>
+
+                    {form.productType === "Other" && (
+                      <div className="form-group">
+                        <label className="form-label">Custom Product Name *</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="e.g. Dashcam"
+                          required
+                          value={form.customProductName}
+                          onChange={(e) => onChange("customProductName", e.target.value)}
+                        />
+                        {errors.customProductName && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.customProductName}</small>}
                       </div>
                     )}
-                  </Field>
-                  {editingId && (
-                    <Field label="Order Status">
-                      <select value={form.orderStatus} onChange={(e) => onChange("orderStatus", e.target.value)}>
-                        <option>Pending</option>
-                        <option>Approved</option>
-                        <option>Processing</option>
-                        <option>Delivered</option>
-                        <option>Cancelled</option>
+
+                    <div className="form-group">
+                      <label className="form-label">Number of Units *</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. 1"
+                        inputMode="numeric"
+                        required
+                        value={form.numberOfUnits}
+                        onKeyDown={preventNonNumericKey}
+                        onChange={(e) => onChange("numberOfUnits", sanitizeDigits(e.target.value, 6))}
+                      />
+                      {errors.numberOfUnits && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.numberOfUnits}</small>}
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Amount per Unit (₹) *</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. 3500"
+                        inputMode="decimal"
+                        required
+                        value={form.amount}
+                        onChange={(e) => onChange("amount", sanitizePositiveNumber(e.target.value))}
+                      />
+                      {errors.amount && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.amount}</small>}
+                    </div>
+                  </div>
+
+                  {/* Summary Bar */}
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr 1fr 1fr",
+                      gap: "10px",
+                      background: "#ffffff",
+                      padding: "10px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid #e2e8f0",
+                      marginTop: "4px",
+                    }}
+                  >
+                    <div>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block" }}>Total Amount</span>
+                      <strong style={{ fontSize: "14px", color: "var(--text-heading)" }}>
+                        ₹{totalAmount.toLocaleString("en-IN")}
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block" }}>Estimated Incentive</span>
+                      <strong style={{ fontSize: "14px", color: "#16a34a" }}>
+                        ₹{Math.round(incentive).toLocaleString("en-IN")}
+                      </strong>
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ marginBottom: "2px" }}>Advance Amount (₹) *</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        style={{ height: "30px", fontSize: "12px", padding: "4px 8px" }}
+                        placeholder="0"
+                        inputMode="decimal"
+                        value={form.advanceAmount}
+                        onChange={(e) => onChange("advanceAmount", sanitizePositiveNumber(e.target.value))}
+                      />
+                      {errors.advanceAmount && <small style={{ color: "#ef4444", fontSize: "10px" }}>{errors.advanceAmount}</small>}
+                    </div>
+                    <div>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block" }}>Remaining Amount</span>
+                      <strong style={{ fontSize: "14px", color: "#0284c7" }}>
+                        ₹{Math.max(0, totalAmount - Number(form.advanceAmount || 0)).toLocaleString("en-IN")}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Additional Details & Payment */}
+                <div className="compact-section-box">
+                  <div className="compact-section-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <rect x="2" y="4" width="20" height="16" rx="2" />
+                      <line x1="2" y1="10" x2="22" y2="10" />
+                    </svg>
+                    <span>3. Payment &amp; Logistics Details</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr 1fr 1.2fr", gap: "10px" }}>
+                    <div className="form-group">
+                      <label className="form-label">Bank Name *</label>
+                      <select
+                        className="form-control"
+                        required
+                        value={form.bankName}
+                        onChange={(e) => onChange("bankName", e.target.value)}
+                      >
+                        <option value="">Select Bank</option>
+                        <option value="SBI">SBI</option>
+                        <option value="BOB">BOB</option>
+                        <option value="BOM">BOM</option>
+                        <option value="MGB">MGB</option>
+                        <option value="UPGB">UPGB</option>
+                        <option value="MPGB">MPGB</option>
+                        <option value="HDFC">HDFC</option>
+                        <option value="ICICI">ICICI</option>
+                        <option value="Axis">Axis</option>
                       </select>
-                    </Field>
+                      {errors.bankName && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.bankName}</small>}
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Parcel Status</label>
+                      <select
+                        className="form-control"
+                        value={form.parcelStatus}
+                        onChange={(e) => onChange("parcelStatus", e.target.value)}
+                      >
+                        <option value="Pending">Pending</option>
+                        <option value="Process">Process</option>
+                        <option value="Parcel">Parcel</option>
+                        <option value="Packed">Packed</option>
+                        <option value="Dispatched">Dispatched</option>
+                        <option value="Delivered">Delivered</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Tracking ID</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. TRK12345"
+                        value={form.trackingId}
+                        onChange={(e) => onChange("trackingId", e.target.value)}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Courier Company</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. Blue Dart / DTDC"
+                        value={form.courierCompany}
+                        onChange={(e) => onChange("courierCompany", e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "10px", marginTop: "4px" }}>
+                    <div className="form-group">
+                      <label className="form-label">Description / Dispatch Notes</label>
+                      <textarea
+                        className="form-control"
+                        rows={2}
+                        placeholder="Enter any additional instructions, client notes..."
+                        value={form.description}
+                        onChange={(e) => onChange("description", e.target.value)}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Payment Screenshot (Optional, Max 2MB)</label>
+                      <div
+                        style={{
+                          border: "1.5px dashed #cbd5e1",
+                          borderRadius: "8px",
+                          padding: "8px 12px",
+                          background: "#ffffff",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: "8px",
+                        }}
+                      >
+                        <input
+                          type="file"
+                          accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                          onChange={(e) => handleScreenshot(e.target.files?.[0])}
+                          style={{ fontSize: "11px", maxWidth: "180px" }}
+                        />
+                        {previewUrl && (
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <img
+                              src={previewUrl}
+                              alt="Preview"
+                              style={{ width: "28px", height: "28px", objectFit: "cover", borderRadius: "4px", border: "1px solid #e2e8f0" }}
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{ padding: "2px 6px", fontSize: "11px" }}
+                              onClick={removeScreenshot}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {errors.paymentScreenshot && <small style={{ color: "#ef4444", fontSize: "11px" }}>{errors.paymentScreenshot}</small>}
+                    </div>
+                  </div>
+
+                  {editingId && (
+                    <div className="form-group" style={{ marginTop: "4px", maxWidth: "240px" }}>
+                      <label className="form-label">Order Status</label>
+                      <select
+                        className="form-control"
+                        value={form.orderStatus}
+                        onChange={(e) => onChange("orderStatus", e.target.value)}
+                      >
+                        <option value="Pending">Pending</option>
+                        <option value="Approved">Approved</option>
+                        <option value="Processing">Processing</option>
+                        <option value="Delivered">Delivered</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+                    </div>
                   )}
                 </div>
               </div>
 
-              <div className="form-actions">
-                <button className="primary-btn form-submit-btn" type="submit" disabled={loading}>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setIsFormOpen(false);
+                    setForm(initialState);
+                    setEditingId(null);
+                    setErrors({});
+                  }}
+                >
+                  Close
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={loading}>
                   {loading ? "Submitting..." : editingId ? "Update Order" : "Submit Order"}
                 </button>
               </div>
@@ -709,342 +1174,143 @@ const EmployeeOrderPage = () => {
           </div>
         </div>
       )}
-      {toast && <Toast message={toast} type={toast.includes("successfully") ? "success" : "error"} onClose={clearToast} />}
 
+      {/* Modern Modal: View Order Details */}
       {viewOrder && (
-        <div className="modal-overlay" onClick={() => setViewOrder(null)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "600px" }}>
-            <h3 className="modal-title">View Order Details</h3>
-            <div className="modal-fields" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", maxHeight: "60vh", overflowY: "auto", paddingRight: "8px" }}>
-              <div className="field-wrap" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
-                <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Customer Name</span>
-                <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500 }}>{viewOrder.customerName || "-"}</div>
+        <div className="modal-backdrop" onClick={() => setViewOrder(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "660px", width: "95%" }}>
+            <div className="modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span className="badge badge-blue" style={{ fontSize: "11px", fontWeight: 700 }}>DETAILS</span>
+                <h3 style={{ fontSize: "16px", fontWeight: 700, margin: 0 }}>Order &amp; Purchase Details</h3>
               </div>
-              <div className="field-wrap" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
-                <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Mobile Number</span>
-                <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500 }}>{viewOrder.mobileNumber || "-"}</div>
-              </div>
-              <div className="field-wrap" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
-                <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Alternate Mobile</span>
-                <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500 }}>{viewOrder.alternateMobileNumber || "-"}</div>
-              </div>
-              <div className="field-wrap" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
-                <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Full Address</span>
-                <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500 }}>{viewOrder.fullAddress || "-"}</div>
-              </div>
-              <div className="field-wrap" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
-                <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Pincode</span>
-                <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500 }}>{viewOrder.pincode || "-"}</div>
-              </div>
-              <div className="field-wrap" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
-                <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Product Type</span>
-                <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500 }}>{viewOrder.productType || "-"}</div>
-              </div>
-              {viewOrder.productType === "Other" && (
-                <div className="field-wrap" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
-                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Custom Product Name</span>
-                  <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500 }}>{viewOrder.customProductName || "-"}</div>
+              <button type="button" className="modal-close-btn" onClick={() => setViewOrder(null)}>
+                <CloseIcon />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
+                    Customer Name
+                  </span>
+                  <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 600 }}>{viewOrder.customerName || "-"}</div>
                 </div>
-              )}
-              <div className="field-wrap" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
-                <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Units</span>
-                <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500 }}>{viewOrder.numberOfUnits || 0}</div>
-              </div>
-              <div className="field-wrap" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
-                <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Amount per Unit</span>
-                <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500 }}>Rs.{viewOrder.amount || 0}</div>
-              </div>
-              <div className="field-wrap" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
-                <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Total Amount</span>
-                <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500 }}>Rs.{viewOrder.totalAmount || 0}</div>
-              </div>
-              <div className="field-wrap" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
-                <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Advance Amount</span>
-                <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500 }}>Rs.{viewOrder.advanceAmount || 0}</div>
-              </div>
-              <div className="field-wrap" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
-                <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Date</span>
-                <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500 }}>{formatDateTime(viewOrder.createdAt)}</div>
-              </div>
-              <div className="field-wrap" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
-                <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Order Status</span>
-                <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500 }}>{viewOrder.orderStatus || "-"}</div>
-              </div>
-              <div className="field-wrap" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
-                <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Parcel Status</span>
-                <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500 }}>{viewOrder.parcelStatus || "-"}</div>
-              </div>
-              <div className="field-wrap" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
-                <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Tracking ID</span>
-                <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500 }}>{viewOrder.trackingId || "-"}</div>
-              </div>
-              <div className="field-wrap" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
-                <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Courier Company</span>
-                <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500 }}>{viewOrder.courierCompany || "-"}</div>
-              </div>
-              <div className="field-wrap" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
-                <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Bank Name</span>
-                <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500 }}>{viewOrder.bankName || "-"}</div>
-              </div>
-              {viewOrder.paymentScreenshot && (
-                <div style={{ gridColumn: "1 / -1", marginTop: "12px" }}>
-                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "8px" }}>Payment Screenshot</span>
-                  <div style={{ display: "flex", justifyContent: "center", background: "rgba(0,0,0,0.2)", borderRadius: "8px", padding: "12px", border: "1px solid var(--border)" }}>
-                    <a href={toAbsoluteAssetUrl(viewOrder.paymentScreenshot)} target="_blank" rel="noreferrer">
-                      <img
-                        src={toAbsoluteAssetUrl(viewOrder.paymentScreenshot)}
-                        alt="Payment Screenshot"
-                        style={{ maxWidth: "100%", maxHeight: "250px", objectFit: "contain", borderRadius: "4px" }}
-                      />
-                    </a>
+                <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
+                    Mobile Number
+                  </span>
+                  <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500, fontFamily: "monospace" }}>{viewOrder.mobileNumber || "-"}</div>
+                </div>
+                <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
+                    Alternate Mobile
+                  </span>
+                  <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500, fontFamily: "monospace" }}>{viewOrder.alternateMobileNumber || "-"}</div>
+                </div>
+                <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
+                    Pincode
+                  </span>
+                  <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 500 }}>{viewOrder.pincode || "-"}</div>
+                </div>
+                <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px", gridColumn: "1 / -1" }}>
+                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
+                    Full Delivery Address
+                  </span>
+                  <div style={{ fontSize: "13.5px", color: "var(--text)", fontWeight: 500 }}>{viewOrder.fullAddress || "-"}</div>
+                </div>
+                <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
+                    Product Type
+                  </span>
+                  <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 600 }}>
+                    {viewOrder.productType === "Other" && viewOrder.customProductName ? viewOrder.customProductName : viewOrder.productType}
                   </div>
                 </div>
-              )}
+                <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
+                    Number of Units
+                  </span>
+                  <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 600 }}>{viewOrder.numberOfUnits || 0}</div>
+                </div>
+                <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
+                    Total Amount
+                  </span>
+                  <div style={{ fontSize: "15px", color: "var(--text-heading)", fontWeight: 700 }}>
+                    ₹{Number(viewOrder.totalAmount || 0).toLocaleString("en-IN")}
+                  </div>
+                </div>
+                <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
+                    Advance Paid
+                  </span>
+                  <div style={{ fontSize: "14px", color: "#16a34a", fontWeight: 600 }}>
+                    ₹{Number(viewOrder.advanceAmount || 0).toLocaleString("en-IN")}
+                  </div>
+                </div>
+                <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
+                    Order Status
+                  </span>
+                  <div>{statusBadge(viewOrder.orderStatus)}</div>
+                </div>
+                <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
+                    Parcel Status
+                  </span>
+                  <div style={{ fontSize: "13.5px", color: "var(--text-heading)", fontWeight: 500 }}>{viewOrder.parcelStatus || "Pending"}</div>
+                </div>
+                <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
+                    Bank Name
+                  </span>
+                  <div style={{ fontSize: "13.5px", color: "var(--text-heading)", fontWeight: 500 }}>{viewOrder.bankName || "-"}</div>
+                </div>
+                <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
+                    Tracking ID &amp; Courier
+                  </span>
+                  <div style={{ fontSize: "13px", color: "var(--text-heading)", fontWeight: 500 }}>
+                    {viewOrder.trackingId ? `${viewOrder.trackingId} (${viewOrder.courierCompany || "N/A"})` : "-"}
+                  </div>
+                </div>
+
+                {viewOrder.paymentScreenshot && (
+                  <div style={{ gridColumn: "1 / -1", marginTop: "8px" }}>
+                    <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "6px", fontWeight: 600 }}>
+                      Payment Screenshot
+                    </span>
+                    <div style={{ display: "flex", justifyContent: "center", background: "#f8fafc", borderRadius: "8px", padding: "10px", border: "1px solid #e2e8f0" }}>
+                      <a href={toAbsoluteAssetUrl(viewOrder.paymentScreenshot)} target="_blank" rel="noreferrer">
+                        <img
+                          src={toAbsoluteAssetUrl(viewOrder.paymentScreenshot)}
+                          alt="Payment Screenshot"
+                          style={{ maxWidth: "100%", maxHeight: "220px", objectFit: "contain", borderRadius: "6px" }}
+                        />
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="modal-actions" style={{ marginTop: "24px" }}>
-              <button className="primary-btn" onClick={() => setViewOrder(null)}>Close</button>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setViewOrder(null)}>
+                Close
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Date Filters Container - Outside of Table Card */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
-        <button
-          className="primary-btn"
-          onClick={() => setDateFilter("today")}
-          style={{
-            background: dateFilter === "today" ? "var(--primary)" : "var(--bg-card)",
-            border: "1px solid var(--border)",
-            color: dateFilter === "today" ? "#fff" : "var(--text)",
-            padding: "8px 16px", fontSize: 13, cursor: "pointer"
-          }}
-        >
-          Today
-        </button>
-        <button
-          className="primary-btn"
-          onClick={() => setDateFilter("yesterday")}
-          style={{
-            background: dateFilter === "yesterday" ? "var(--primary)" : "var(--bg-card)",
-            border: "1px solid var(--border)",
-            color: dateFilter === "yesterday" ? "#fff" : "var(--text)",
-            padding: "8px 16px", fontSize: 13, cursor: "pointer"
-          }}
-        >
-          Yesterday
-        </button>
-        <button
-          className="primary-btn"
-          onClick={() => setDateFilter("week")}
-          style={{
-            background: dateFilter === "week" ? "var(--primary)" : "var(--bg-card)",
-            border: "1px solid var(--border)",
-            color: dateFilter === "week" ? "#fff" : "var(--text)",
-            padding: "8px 16px", fontSize: 13, cursor: "pointer"
-          }}
-        >
-          This Week
-        </button>
-        <button
-          className="primary-btn"
-          onClick={() => setDateFilter("month")}
-          style={{
-            background: dateFilter === "month" ? "var(--primary)" : "var(--bg-card)",
-            border: "1px solid var(--border)",
-            color: dateFilter === "month" ? "#fff" : "var(--text)",
-            padding: "8px 16px", fontSize: 13, cursor: "pointer"
-          }}
-        >
-          This Month
-        </button>
-        <button
-          className="primary-btn"
-          onClick={() => setDateFilter("custom")}
-          style={{
-            background: dateFilter === "custom" ? "var(--primary)" : "var(--bg-card)",
-            border: "1px solid var(--border)",
-            color: dateFilter === "custom" ? "#fff" : "var(--text)",
-            padding: "8px 16px", fontSize: 13, cursor: "pointer"
-          }}
-        >
-          Custom Range
-        </button>
-
-        {dateFilter === "custom" && (
-          <>
-            <input
-              type="date"
-              value={orderDateFrom}
-              max={today}
-              onChange={(e) => {
-                const val = e.target.value;
-                setOrderDateFrom(val);
-                if (orderDateTo && val > orderDateTo) {
-                  setOrderDateTo("");
-                }
-              }}
-              style={{ width: "auto", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border)", fontSize: 13, outline: "none", background: "rgba(255,255,255,0.05)", color: "var(--text)" }}
-            />
-            <span style={{ color: "var(--text-muted)", fontSize: 13 }}>to</span>
-            <input
-              type="date"
-              value={orderDateTo}
-              min={orderDateFrom}
-              max={today}
-              onChange={(e) => setOrderDateTo(e.target.value)}
-              style={{ width: "auto", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border)", fontSize: 13, outline: "none", background: "rgba(255,255,255,0.05)", color: "var(--text)" }}
-            />
-          </>
-        )}
-
-        <button
-          className="primary-btn"
-          onClick={fetchRecent}
-          style={{
-            padding: "8px 16px",
-            fontSize: 13,
-            marginLeft: "auto"
-          }}
-        >
-          Refresh
-        </button>
-      </div>
-
-      <div className="glass-card" style={{ padding: 24 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "var(--text-heading)" }}>Recent Orders</h3>
-          <button
-            className="primary-btn"
-            onClick={() => downloadOrdersPDF(filteredOrders)}
-            style={{ background: "#10b981", padding: "8px 16px", fontSize: 13 }}
-          >
-            ⬇ Download PDF
-          </button>
-        </div>
-          
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Customer</th>
-                  <th>Mobile</th>
-                  <th>Product</th>
-                  <th>Units</th>
-                  <th>Total</th>
-                  <th>Status</th>
-                  <th>Date</th>
-                  <th style={{ textAlign: "center" }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading && recentOrders.length === 0 ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <tr key={`skel-${i}`}>
-                      <td><div className="skeleton-box" style={{ height: "14px", width: "80%" }} /></td>
-                      <td><div className="skeleton-box" style={{ height: "14px", width: "70%" }} /></td>
-                      <td><div className="skeleton-box" style={{ height: "14px", width: "60%" }} /></td>
-                      <td><div className="skeleton-box" style={{ height: "14px", width: "40%" }} /></td>
-                      <td><div className="skeleton-box" style={{ height: "14px", width: "65%" }} /></td>
-                      <td><div className="skeleton-box" style={{ height: "14px", width: "50%" }} /></td>
-                      <td><div className="skeleton-box" style={{ height: "14px", width: "60%" }} /></td>
-                      <td><div className="skeleton-box" style={{ height: "14px", width: "40%" }} /></td>
-                    </tr>
-                  ))
-                ) : filteredOrders.length === 0 ? (
-                  <tr><td colSpan={8} style={{ textAlign: "center", color: "var(--text-muted)", padding: 24 }}>No matching orders</td></tr>
-                ) : (
-                  filteredOrders.map((o) => (
-                    <tr key={o._id}>
-                      <td style={{ fontWeight: 600 }}>{o.customerName}</td>
-                      <td>{o.mobileNumber}</td>
-                      <td>{o.productType}</td>
-                      <td>{o.numberOfUnits}</td>
-                      <td style={{ fontWeight: 600, color: "var(--text-heading)" }}>
-                        {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(Number(o.totalAmount || 0))}
-                      </td>
-                      <td><span className="status-badge" style={{ background: "rgba(6,182,212,0.12)", color: "var(--primary)" }}>{o.orderStatus}</span></td>
-                      <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{formatDateTime(o.createdAt)}</td>
-                      <td style={{ textAlign: "center" }}>
-                        <div style={{ display: "flex", flexDirection: "row", gap: 8, justifyContent: "center", alignItems: "center" }}>
-                          <button
-                            title="View Details"
-                            onClick={() => setViewOrder(o)}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              padding: "6px",
-                              borderRadius: "6px",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              color: "#06b6d4"
-                            }}
-                          >
-                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                              <circle cx="12" cy="12" r="3" />
-                            </svg>
-                          </button>
-                          <button
-                            title="Edit"
-                            onClick={() => handleEditOrder(o)}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              padding: "6px",
-                              borderRadius: "6px",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              color: "#f59e0b"
-                            }}
-                          >
-                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                              <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z" />
-                            </svg>
-                          </button>
-                          <button
-                            title="Delete"
-                            onClick={() => handleDeleteOrder(o)}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              padding: "6px",
-                              borderRadius: "6px",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              color: "#ef4444"
-                            }}
-                          >
-                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="3 6 5 6 21 6" />
-                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                              <line x1="10" y1="11" x2="10" y2="17" />
-                              <line x1="14" y1="11" x2="14" y2="17" />
-                            </svg>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
+      {/* CSV Import Modal */}
       <CsvImportModal
         isOpen={isCsvModalOpen}
         onClose={() => setIsCsvModalOpen(false)}
         title="Import Orders from CSV"
         description="Upload customer order records and purchase information from a CSV spreadsheet."
-        templateFilename="my_orders_template.csv"
+        templateFilename="orders_template.csv"
         templateHeaders={[
           "Customer Name",
           "Mobile Number",
@@ -1059,15 +1325,17 @@ const EmployeeOrderPage = () => {
           "Order Status",
           "Parcel Status",
           "Tracking ID",
-          "Courier Company"
+          "Courier Company",
         ]}
         templateSampleRows={[
-          ["Vijay Kumar", "9876543210", "9812345678", "Sector 14, Gurgaon", "122001", "GPS", "1", "450000", "50000", "2026-09-29", "Approved", "Delivered", "TRK94821", "Blue Dart"]
+          ["Vijay Kumar", "9876543210", "9812345678", "Sector 14, Gurgaon", "122001", "GPS", "1", "45000", "5000", "2026-09-29", "Approved", "Delivered", "TRK94821", "Blue Dart"],
         ]}
         requiredHeaders={["Customer Name", "Mobile Number"]}
         onImport={handleImportOrders}
       />
-    </section>
+
+      {toast && <Toast message={toast} type={toast.includes("successfully") ? "success" : "error"} onClose={clearToast} />}
+    </div>
   );
 };
 

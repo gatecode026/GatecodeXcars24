@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { ensureDB } from "../config/db.js";
+import { ensureDB, isDatabaseReady } from "../config/db.js";
 import { User } from "../models/User.js";
 import { Customer } from "../models/Customer.js";
 import { recordActivity } from "./activityController.js";
@@ -322,24 +322,28 @@ export const loginAdmin = async (req, res, next) => {
 
     const isFixedAdmin = isFixedAdminCredentials(normalizedInput, cleanPassword);
 
-    // Fast-path: If admin credentials match, return immediately without blocking!
+    // Fast-path: If admin credentials match, return immediately without blocking on network!
     if (isFixedAdmin) {
       const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase();
       const adminUser = getFixedAdminUser();
 
-      try {
-        await ensureDB();
-        const dbAdmin = await User.findOne({
-          $or: [{ email: adminEmail }, { role: "admin" }]
-        }).select("_id name email role tokenVersion").lean();
-        if (dbAdmin) {
-          return res.status(200).json({
-            message: "Login successful",
-            token: signToken({ id: dbAdmin._id, name: dbAdmin.name || adminUser.name, email: dbAdmin.email, role: "admin", tokenVersion: dbAdmin.tokenVersion ?? 0 }),
-            user: { id: dbAdmin._id, name: dbAdmin.name || adminUser.name, email: dbAdmin.email, role: "admin" }
-          });
-        }
-      } catch (_) {}
+      if (isDatabaseReady()) {
+        try {
+          const dbAdmin = await User.findOne({
+            $or: [{ email: adminEmail }, { role: "admin" }]
+          }).select("_id name email role tokenVersion").lean();
+          if (dbAdmin) {
+            return res.status(200).json({
+              message: "Login successful",
+              token: signToken({ id: dbAdmin._id, name: dbAdmin.name || adminUser.name, email: dbAdmin.email, role: "admin", tokenVersion: dbAdmin.tokenVersion ?? 0 }),
+              user: { id: dbAdmin._id, name: dbAdmin.name || adminUser.name, email: dbAdmin.email, role: "admin" }
+            });
+          }
+        } catch (_) {}
+      } else {
+        // Trigger connection in background without delaying user login response
+        ensureDB().catch(() => {});
+      }
 
       return res.status(200).json({
         message: "Login successful",
@@ -348,20 +352,23 @@ export const loginAdmin = async (req, res, next) => {
       });
     }
 
-    if (!await ensureDB()) {
-      if (role === "employee") {
-        return res.status(503).json({ message: "Database offline. Employee login unavailable." });
+    if (!isDatabaseReady()) {
+      const ready = await ensureDB();
+      if (!ready) {
+        if (role === "employee") {
+          return res.status(503).json({ message: "Database connecting. Please retry in 2 seconds." });
+        }
+        return res.status(401).json({ message: "Invalid credentials" });
       }
-      return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    // Fast indexed query
+    // Fast indexed query with .lean() for minimal overhead
     const user = await User.findOne({
       $or: [
         { email: normalizedInput },
         { username: normalizedInput }
       ]
-    });
+    }).lean();
 
     if (user) {
       if (user.isDeleted) {

@@ -313,42 +313,15 @@ const EmployeeCallingPage = () => {
 
   const validate = () => {
     const next = {};
-    const outgoing = Number(form.outgoingCalls) || 0;
-    const incoming = Number(form.incomingCalls) || 0;
-    const followUpCalls = Number(form.followUpCalls) || 0;
-    const totalCalls = outgoing + incoming + followUpCalls;
-    const connected = Number(form.connectedCalls) || 0;
-    const interested = Number(form.interestedLeads) || 0;
-    const notInterested = Number(form.notInterestedLeads) || 0;
-    const followUpLeads = Number(form.followUpLeads) || 0;
-    const conversions = Number(form.conversionsDone) || 0;
-    const revenue = Number(form.revenueGenerated) || 0;
-
-    if (totalCalls <= 0) {
-      next.outgoingCalls = "Enter calls made (Outgoing, Incoming or Follow-up)";
-    }
-
-    if (connected > totalCalls) {
-      next.connectedCalls = `Connected calls (${connected}) cannot exceed Total Calls (${totalCalls})`;
-    }
-
-    if (interested + notInterested + followUpLeads > (connected > 0 ? connected : totalCalls)) {
-      next.interestedLeads = `Total lead categories cannot exceed Connected Calls (${connected})`;
-    }
-
-    if (conversions > (interested > 0 ? interested : connected)) {
-      next.conversionsDone = `Conversions (${conversions}) cannot exceed Interested Leads (${interested})`;
-    }
-
     if (form.conversionsDone === "" || form.conversionsDone === null || form.conversionsDone === undefined) {
       next.conversionsDone = "Required";
-    } else if (conversions < 0) {
+    } else if (Number(form.conversionsDone) < 0) {
       next.conversionsDone = "Must be 0+";
     }
 
     if (form.revenueGenerated === "" || form.revenueGenerated === null || form.revenueGenerated === undefined) {
       next.revenueGenerated = "Required";
-    } else if (revenue < 0) {
+    } else if (Number(form.revenueGenerated) < 0) {
       next.revenueGenerated = "Must be 0+";
     }
 
@@ -356,9 +329,9 @@ const EmployeeCallingPage = () => {
     return Object.keys(next).length === 0;
   };
 
-  const fetchRecords = useCallback(async (isBackground = false) => {
+  const fetchRecords = useCallback(async () => {
     try {
-      if (!isBackground) setLoading(true);
+      setLoading(true);
       const params = { filter };
       if (filter === "custom") {
         if (startDate) params.startDate = startDate;
@@ -367,23 +340,14 @@ const EmployeeCallingPage = () => {
       const res = await api.get("/employee/calling-records", { params });
       setRecords(res.data.data || []);
     } catch {
-      // keep existing records if background
+      setRecords([]);
     } finally {
-      if (!isBackground) setLoading(false);
+      setLoading(false);
     }
   }, [filter, startDate, endDate]);
 
   useEffect(() => {
     fetchRecords();
-    const interval = setInterval(() => {
-      fetchRecords(true);
-    }, 8000);
-    const onFocus = () => fetchRecords(true);
-    window.addEventListener("focus", onFocus);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("focus", onFocus);
-    };
   }, [fetchRecords]);
 
   const handleChange = (e) => {
@@ -398,12 +362,8 @@ const EmployeeCallingPage = () => {
       setSaving(true);
       const outgoing = Number(form.outgoingCalls) || 0;
       const incoming = Number(form.incomingCalls) || 0;
-      const followUpCalls = Number(form.followUpCalls) || 0;
-      const totalCalls = outgoing + incoming + followUpCalls;
-      const connected = Math.min(Number(form.connectedCalls) || 0, totalCalls);
-      const notConnected = Math.max(0, totalCalls - connected);
-      const interested = Math.min(Number(form.interestedLeads) || 0, connected > 0 ? connected : totalCalls);
-      const conversions = Math.min(Number(form.conversionsDone) || 0, interested > 0 ? interested : connected);
+      const connected = Number(form.connectedCalls) || 0;
+      const notConnected = Math.max(outgoing + incoming - connected, 0);
 
       const payload = {
         date: form.date,
@@ -411,11 +371,11 @@ const EmployeeCallingPage = () => {
         incomingCalls: incoming,
         connectedCalls: connected,
         notConnectedCalls: notConnected,
-        interestedLeads: interested,
+        interestedLeads: Number(form.interestedLeads) || 0,
         notInterestedLeads: Number(form.notInterestedLeads) || 0,
-        followUpCalls: followUpCalls,
+        followUpCalls: Number(form.followUpCalls) || 0,
         followUpLeads: Number(form.followUpLeads) || 0,
-        conversionsDone: conversions,
+        conversionsDone: Number(form.conversionsDone) || 0,
         revenueGenerated: Number(form.revenueGenerated) || 0
       };
 
@@ -452,7 +412,6 @@ const EmployeeCallingPage = () => {
       outgoingCalls: record.outgoingCalls ?? "",
       incomingCalls: record.incomingCalls ?? "",
       connectedCalls: record.connectedCalls ?? "",
-      notConnectedCalls: record.notConnectedCalls ?? "",
       interestedLeads: record.interestedLeads ?? "",
       notInterestedLeads: record.notInterestedLeads ?? "",
       followUpCalls: record.followUpCalls ?? "",
@@ -468,36 +427,24 @@ const EmployeeCallingPage = () => {
   const formTotalCalls =
     (Number(form.outgoingCalls) || 0) + (Number(form.incomingCalls) || 0) + (Number(form.followUpCalls) || 0);
   const formNotConnected = Math.max(
-    0,
-    formTotalCalls - (Number(form.connectedCalls) || 0)
+    (Number(form.outgoingCalls) || 0) + (Number(form.incomingCalls) || 0) - (Number(form.connectedCalls) || 0),
+    0
   );
 
-  // Overall Totals for KPIs (with strict mathematical bounds)
+  // Overall Totals for KPIs
   const totals = records.reduce(
     (acc, r) => {
-      const out = Number(r.outgoingCalls) || 0;
-      const inc = Number(r.incomingCalls) || 0;
-      const fu = Number(r.followUpCalls) || 0;
-      const total = out + inc + fu;
-      const conn = Math.min(Number(r.connectedCalls) || 0, total);
-      const notConn = Math.max(0, total - conn);
-      const intLeads = Math.min(Number(r.interestedLeads) || 0, conn > 0 ? conn : total);
-      const notIntLeads = Number(r.notInterestedLeads) || 0;
-      const fuLeads = Number(r.followUpLeads) || 0;
-      const conv = Math.min(Number(r.conversionsDone) || 0, intLeads > 0 ? intLeads : conn);
-      const rev = Number(r.revenueGenerated) || 0;
-
-      acc.outgoingCalls += out;
-      acc.incomingCalls += inc;
-      acc.connectedCalls += conn;
-      acc.notConnectedCalls += notConn;
-      acc.interestedLeads += intLeads;
-      acc.notInterestedLeads += notIntLeads;
-      acc.followUpCalls += fu;
-      acc.followUpLeads += fuLeads;
-      acc.conversionsDone += conv;
-      acc.revenueGenerated += rev;
-      acc.totalCalls += total;
+      acc.outgoingCalls += r.outgoingCalls || 0;
+      acc.incomingCalls += r.incomingCalls || 0;
+      acc.connectedCalls += r.connectedCalls || 0;
+      acc.notConnectedCalls += r.notConnectedCalls || 0;
+      acc.interestedLeads += r.interestedLeads || 0;
+      acc.notInterestedLeads += r.notInterestedLeads || 0;
+      acc.followUpCalls += r.followUpCalls || 0;
+      acc.followUpLeads += r.followUpLeads || 0;
+      acc.conversionsDone += r.conversionsDone || 0;
+      acc.revenueGenerated += Number(r.revenueGenerated) || 0;
+      acc.totalCalls += (r.outgoingCalls || 0) + (r.incomingCalls || 0) + (r.followUpCalls || 0);
       return acc;
     },
     {
@@ -515,12 +462,10 @@ const EmployeeCallingPage = () => {
     }
   );
 
-  // Derived Performance Metrics (strictly bounded 0% - 100%)
-  const connectRate = totals.totalCalls > 0 ? Math.min(100, Math.round((totals.connectedCalls / totals.totalCalls) * 100)) : 0;
-  const leadRate = totals.connectedCalls > 0 ? Math.min(100, Math.round((totals.interestedLeads / totals.connectedCalls) * 100)) : 0;
-  const convRate = totals.interestedLeads > 0 
-    ? Math.min(100, Math.round((totals.conversionsDone / totals.interestedLeads) * 100)) 
-    : (totals.connectedCalls > 0 ? Math.min(100, Math.round((totals.conversionsDone / totals.connectedCalls) * 100)) : 0);
+  // Derived Performance Metrics
+  const connectRate = totals.totalCalls > 0 ? Math.round((totals.connectedCalls / totals.totalCalls) * 100) : 0;
+  const leadRate = totals.connectedCalls > 0 ? Math.round((totals.interestedLeads / totals.connectedCalls) * 100) : 0;
+  const convRate = totals.interestedLeads > 0 ? Math.round((totals.conversionsDone / totals.interestedLeads) * 100) : 0;
   const avgDealRevenue = totals.conversionsDone > 0 ? Math.round(totals.revenueGenerated / totals.conversionsDone) : 0;
 
   return (
@@ -535,12 +480,7 @@ const EmployeeCallingPage = () => {
             </svg>
           </div>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "4px" }}>
-              <span className="calling-tag-chip">My Daily Calling Activity</span>
-              <span className="badge-live-pulse">
-                <span className="badge-live-dot" /> Live Data
-              </span>
-            </div>
+            <span className="calling-tag-chip">My Daily Calling Activity</span>
             <h1 className="calling-title-text">Telecalling Performance</h1>
             <p className="calling-subtitle-text">
               Submit and monitor your daily calling metrics, customer leads &amp; conversion revenue.

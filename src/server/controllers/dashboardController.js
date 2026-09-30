@@ -61,7 +61,7 @@ export const getDashboardSummary = async (req, res, next) => {
     }
 
     // Consolidated single roundtrip for all customer KPIs, 7-day trend, and top employees
-    const [customerFacetResult, orderStatsResult, activeEmployees, totalReturns, recentLeadsRaw, callingStatsResult] = await Promise.all([
+    const [customerFacetResult, orderStatsResult, activeEmployees, totalReturns, recentLeadsRaw] = await Promise.all([
       Customer.aggregate([
         { $match: customerFilter },
         {
@@ -163,19 +163,27 @@ export const getDashboardSummary = async (req, res, next) => {
         .limit(10)
         .lean(),
       CallingRecord.aggregate([
-        ...(userRole === "employee" ? [{ $match: { employeeId: req.user._id } }] : []),
         {
           $group: {
             _id: null,
+            totalReports: { $sum: 1 },
             totalCalls: { $sum: { $add: ["$outgoingCalls", "$incomingCalls", "$followUpCalls"] } },
             connectedCalls: { $sum: "$connectedCalls" },
             conversionsDone: { $sum: "$conversionsDone" },
-            revenueGenerated: { $sum: "$revenueGenerated" },
-            count: { $sum: 1 }
+            revenueGenerated: { $sum: "$revenueGenerated" }
           }
         }
       ])
     ]);
+
+    const cStats = (callingAggregate && callingAggregate[0]) || {};
+    const callingStats = {
+      totalReports: cStats.totalReports || 0,
+      totalCalls: cStats.totalCalls || 0,
+      connectedCalls: cStats.connectedCalls || 0,
+      conversionsDone: cStats.conversionsDone || 0,
+      revenueGenerated: cStats.revenueGenerated || 0
+    };
 
     const f = customerFacetResult[0] || {};
     const totalLeads = f.total?.[0]?.count || 0;
@@ -254,18 +262,13 @@ export const getDashboardSummary = async (req, res, next) => {
       deliveredOrders: carsSold,
       totalReturns,
 
-      // Telecalling KPI stats
-      callingStats: {
-        totalCalls: callingStatsResult[0]?.totalCalls || 0,
-        connectedCalls: callingStatsResult[0]?.connectedCalls || 0,
-        conversionsDone: callingStatsResult[0]?.conversionsDone || 0,
-        revenueGenerated: callingStatsResult[0]?.revenueGenerated || 0
-      },
-
       // Visualizations & tables
       performanceTrend,
       topEmployees,
-      recentLeads
+      recentLeads,
+
+      // Telecalling KPI summary
+      callingStats
     };
 
     dashboardCache.set(cacheKey, { timestamp: Date.now(), data: responseData });
