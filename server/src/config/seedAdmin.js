@@ -28,8 +28,6 @@ export const ensureFixedAdminUser = async () => {
     console.log(`Fixed admin user ready: ${adminEmail}`);
   }
 
-  // Only real employees should exist - no synthetic demo executives
-
   // Also ensure default TL account exists
   const existingTL = await User.findOne({
     $or: [{ username: "tl" }, { email: "tl@gatecode.in" }, { role: "tl" }]
