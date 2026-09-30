@@ -1,6 +1,8 @@
+import { ensureDB } from "../config/db.js";
 import { Order } from "../models/Order.js";
 import { ReturnRequest } from "../models/ReturnRequest.js";
 import { CallingRecord } from "../models/CallingRecord.js";
+import { Customer } from "../models/Customer.js";
 
 const startOfDay = () => {
   const d = new Date();
@@ -66,6 +68,20 @@ const getDateRange = (filter, startDate, endDate) => {
 
 export const getEmployeeDashboard = async (req, res, next) => {
   try {
+    if (!await ensureDB()) {
+      return res.status(200).json({
+        data: {
+          name: getEmployeeName(req),
+          filter: req.query.filter || "today",
+          orderCount: 0,
+          returnCount: 0,
+          totalIncentive: 0,
+          recentOrders: [],
+          recentReturns: []
+        }
+      });
+    }
+
     const employeeId = getEmployeeId(req);
     if (!employeeId) {
       return res.status(401).json({ message: "Employee context not found" });
@@ -76,12 +92,15 @@ export const getEmployeeDashboard = async (req, res, next) => {
 
     const dateFilter = { employeeId, createdAt: { $gte: start, $lte: end } };
 
-    const [orderCount, returnCount, recentOrders, recentReturns, allOrders] = await Promise.all([
+    const [orderCount, returnCount, leadCount, recentOrders, recentReturns, allOrders] = await Promise.all([
       Order.countDocuments(dateFilter),
       ReturnRequest.countDocuments(dateFilter),
+      Customer.countDocuments({
+        $or: [{ employeeId }, { assignedTo: employeeId }, { leadBy: req.user?.name }]
+      }),
       Order.find(dateFilter).sort({ createdAt: -1 }).limit(5).lean(),
       ReturnRequest.find(dateFilter).sort({ createdAt: -1 }).limit(5).lean(),
-      Order.find(dateFilter).lean()
+      Order.find(dateFilter).select("numberOfUnits amount").lean()
     ]);
 
     const totalIncentive = allOrders.reduce((sum, o) => {
@@ -102,6 +121,7 @@ export const getEmployeeDashboard = async (req, res, next) => {
         filter,
         orderCount,
         returnCount,
+        leadCount,
         totalIncentive: Math.round(totalIncentive),
         recentOrders,
         recentReturns
@@ -114,11 +134,14 @@ export const getEmployeeDashboard = async (req, res, next) => {
 
 export const getEmployeeOrdersHistory = async (req, res, next) => {
   try {
+    if (!await ensureDB()) {
+      return res.status(200).json({ data: [] });
+    }
     const employeeId = getEmployeeId(req);
     if (!employeeId) {
       return res.status(401).json({ message: "Employee context not found" });
     }
-    const orders = await Order.find({ employeeId }).sort({ createdAt: -1 });
+    const orders = await Order.find({ employeeId }).sort({ createdAt: -1 }).lean();
     return res.status(200).json({ data: orders });
   } catch (error) {
     return next(error);
@@ -127,11 +150,14 @@ export const getEmployeeOrdersHistory = async (req, res, next) => {
 
 export const getEmployeeReturnsHistory = async (req, res, next) => {
   try {
+    if (!await ensureDB()) {
+      return res.status(200).json({ data: [] });
+    }
     const employeeId = getEmployeeId(req);
     if (!employeeId) {
       return res.status(401).json({ message: "Employee context not found" });
     }
-    const requests = await ReturnRequest.find({ employeeId }).sort({ createdAt: -1 });
+    const requests = await ReturnRequest.find({ employeeId }).sort({ createdAt: -1 }).lean();
     return res.status(200).json({ data: requests });
   } catch (error) {
     return next(error);
@@ -230,6 +256,9 @@ export const deleteEmployeeReturn = async (req, res, next) => {
 
 export const getEmployeeCallingRecords = async (req, res, next) => {
   try {
+    if (!await ensureDB()) {
+      return res.status(200).json({ data: [] });
+    }
     const employeeId = getEmployeeId(req);
     if (!employeeId) {
       return res.status(401).json({ message: "Employee context not found" });
@@ -241,7 +270,7 @@ export const getEmployeeCallingRecords = async (req, res, next) => {
     const range = getDateRange(dateFilter, startDate, endDate);
     filter.date = { $gte: range.start, $lte: range.end };
 
-    const records = await CallingRecord.find(filter).sort({ date: -1, createdAt: -1 });
+    const records = await CallingRecord.find(filter).sort({ date: -1, createdAt: -1 }).lean();
     return res.status(200).json({ data: records });
   } catch (error) {
     return next(error);
@@ -337,3 +366,104 @@ export const updateEmployeeCallingRecord = async (req, res, next) => {
     return next(error);
   }
 };
+
+export const bulkImportEmployeeCallingRecords = async (req, res, next) => {
+  try {
+    if (!await ensureDB()) {
+      return res.status(503).json({ message: "Database unavailable." });
+    }
+
+    const employeeId = getEmployeeId(req);
+    const employeeName = getEmployeeName(req);
+    if (!employeeId) {
+      return res.status(401).json({ message: "Employee context not found" });
+    }
+
+    const { rows } = req.body;
+    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ message: "No data rows provided for import." });
+    }
+
+    const parseFlexibleDate = (str) => {
+      if (!str) return null;
+      const s = String(str).trim();
+      if (!s) return null;
+      if (s.includes("/")) {
+        const parts = s.split(/[\/\s:]+/);
+        if (parts.length >= 3) {
+          const day = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const year = parseInt(parts[2], 10);
+          const dt = new Date(year, month, day);
+          if (!isNaN(dt.getTime())) return dt;
+        }
+      }
+      const dt = new Date(s);
+      return isNaN(dt.getTime()) ? null : dt;
+    };
+
+    const getVal = (row, ...keys) => {
+      for (const k of keys) {
+        if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== "") {
+          return String(row[k]).trim();
+        }
+        const lowerK = k.toLowerCase().replace(/[^a-z0-9]/g, "");
+        for (const actualKey of Object.keys(row)) {
+          if (actualKey.toLowerCase().replace(/[^a-z0-9]/g, "") === lowerK) {
+            if (row[actualKey] !== undefined && row[actualKey] !== null && String(row[actualKey]).trim() !== "") {
+              return String(row[actualKey]).trim();
+            }
+          }
+        }
+      }
+      return "";
+    };
+
+    const getNum = (row, ...keys) => {
+      const v = getVal(row, ...keys);
+      if (!v) return 0;
+      const parsed = parseFloat(v.replace(/[^0-9.-]/g, ""));
+      return isNaN(parsed) ? 0 : parsed;
+    };
+
+    let insertedCount = 0;
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const rawDate = getVal(r, "Date", "Record Date", "date");
+      const recordDate = parseFlexibleDate(rawDate) || new Date();
+
+      try {
+        await CallingRecord.create({
+          employeeId,
+          employeeName,
+          date: recordDate,
+          outgoingCalls: getNum(r, "Outgoing Calls", "Outgoing", "outgoingCalls"),
+          incomingCalls: getNum(r, "Incoming Calls", "Incoming", "incomingCalls"),
+          connectedCalls: getNum(r, "Connected Calls", "Connected", "connectedCalls"),
+          notConnectedCalls: getNum(r, "Not Connected Calls", "Not Connected", "notConnectedCalls"),
+          interestedLeads: getNum(r, "Interested Leads", "Interested", "interestedLeads"),
+          notInterestedLeads: getNum(r, "Not Interested Leads", "Not Interested", "notInterestedLeads"),
+          followUpCalls: getNum(r, "Follow Up Calls", "Followup Calls", "followUpCalls"),
+          followUpLeads: getNum(r, "Follow Up Leads", "Followup Leads", "followUpLeads"),
+          conversionsDone: getNum(r, "Conversions Done", "Conversions", "Visit Booked", "conversionsDone"),
+          revenueGenerated: getNum(r, "Revenue Generated", "Revenue", "revenueGenerated"),
+          createdBy: employeeId
+        });
+        insertedCount++;
+      } catch (err) {
+        errors.push({ row: i + 1, error: err.message });
+      }
+    }
+
+    return res.status(200).json({
+      message: `Successfully imported ${insertedCount} calling record(s).`,
+      count: insertedCount,
+      errors: errors.length > 0 ? errors.slice(0, 5) : []
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+

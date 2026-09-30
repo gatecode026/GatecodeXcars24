@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
-import { isDatabaseReady } from "../config/db.js";
+import { isDatabaseReady, ensureDB } from "../config/db.js";
 import { User } from "../models/User.js";
 
 import path from "node:path";
@@ -36,7 +36,8 @@ export const protect = async (req, res, next) => {
 
     const decoded = jwt.verify(token, getJwtSecret());
 
-    if (!isDatabaseReady()) {
+    const dbReady = await ensureDB();
+    if (!dbReady) {
       if (decoded.role !== "admin") {
         return res.status(401).json({ message: "Unauthorized. User not found." });
       }

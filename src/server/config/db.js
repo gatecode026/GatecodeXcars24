@@ -1,12 +1,13 @@
 import mongoose from "mongoose";
 import dns from "node:dns/promises";
 
-try {
-  dns.setServers(["1.1.1.1"]);
-} catch (_) {}
+// Do not force custom DNS at module load time as cloud runtimes (Vercel, AWS, etc.) block custom UDP port 53
 
 import fs from "node:fs";
 import path from "node:path";
+
+export const DEFAULT_MONGO_URI =
+  "mongodb+srv://gatecode026:tBNyNzO68BNn3Zkn@cluster0.1meot8l.mongodb.net/bpo-management";
 
 function loadEnvFallback() {
   if (process.env.MONGO_URI && process.env.JWT_SECRET) return;
@@ -36,6 +37,9 @@ loadEnvFallback();
 if (!process.env.JWT_SECRET) {
   process.env.JWT_SECRET = "mySuperSecretKey123";
 }
+if (!process.env.MONGO_URI) {
+  process.env.MONGO_URI = DEFAULT_MONGO_URI;
+}
 
 let cached = global.mongoose;
 if (!cached) {
@@ -56,39 +60,46 @@ const sanitizeMongoUri = (uri) => {
   return uri;
 };
 
-export const connectDB = async (timeoutMs = 10000) => {
-  if (cached.conn && mongoose.connection.readyState === 1) {
-    return cached.conn;
-  }
+export const connectDB = async (timeoutMs = 15000) => {
   if (mongoose.connection.readyState === 1) {
     cached.conn = mongoose;
     return cached.conn;
   }
-  const rawUri = process.env.MONGO_URI;
-  if (!rawUri) {
-    throw new Error("MONGO_URI is missing in environment variables.");
-  }
+
+  // Connection is not ready: reset cache to force fresh handshake
+  cached.conn = null;
+  cached.promise = null;
+
+  const rawUri = process.env.MONGO_URI || DEFAULT_MONGO_URI;
   const mongoUri = sanitizeMongoUri(rawUri);
 
-  if (!cached.promise) {
-    cached.promise = Promise.race([
-      mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000, connectTimeoutMS: 5000 }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("MongoDB connection timed out")), timeoutMs))
-    ])
-      .then((m) => {
-        console.log("MongoDB connected");
-        return m;
-      })
-      .catch((err) => {
-        cached.promise = null;
-        throw err;
-      });
-  }
+  cached.promise = Promise.race([
+    mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 15000,
+      connectTimeoutMS: 15000,
+      maxPoolSize: 10,
+      socketTimeoutMS: 45000
+    }),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("MongoDB connection timed out")), timeoutMs)
+    )
+  ])
+    .then((m) => {
+      console.log("MongoDB connected");
+      cached.conn = m;
+      return m;
+    })
+    .catch((err) => {
+      cached.conn = null;
+      cached.promise = null;
+      throw err;
+    });
 
   try {
-    cached.conn = await cached.promise;
-    return cached.conn;
+    const conn = await cached.promise;
+    return conn;
   } catch (err) {
+    cached.conn = null;
     cached.promise = null;
     throw err;
   }
@@ -102,7 +113,17 @@ export const connectDB = async (timeoutMs = 10000) => {
 export const ensureDB = async () => {
   if (isDatabaseReady()) return true;
   try {
-    await connectDB();
-  } catch (_) {}
+    await connectDB(15000);
+  } catch (err) {
+    console.error("ensureDB primary connection attempt:", err?.message || err);
+    if (!isDatabaseReady()) {
+      try {
+        dns.setServers(["1.1.1.1", "8.8.8.8"]);
+        await connectDB(15000);
+      } catch (err2) {
+        console.error("ensureDB fallback connection attempt:", err2?.message || err2);
+      }
+    }
+  }
   return isDatabaseReady();
 };

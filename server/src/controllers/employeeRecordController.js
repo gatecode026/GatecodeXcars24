@@ -1,10 +1,11 @@
-import { isDatabaseReady } from "../config/db.js";
+import { ensureDB } from "../config/db.js";
 import { EmployeeRecord } from "../models/EmployeeRecord.js";
 import { User } from "../models/User.js";
 
 export const getEmployeeRecords = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
+    const dbReady = await ensureDB();
+    if (!dbReady) {
       return res.status(503).json({ message: "Database unavailable." });
     }
 
@@ -43,7 +44,8 @@ export const getEmployeeRecords = async (req, res, next) => {
 
 export const createEmployeeRecord = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
+    const dbReady = await ensureDB();
+    if (!dbReady) {
       return res.status(503).json({ message: "Database unavailable." });
     }
 
@@ -75,7 +77,8 @@ export const createEmployeeRecord = async (req, res, next) => {
 
 export const deleteEmployeeRecord = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
+    const dbReady = await ensureDB();
+    if (!dbReady) {
       return res.status(503).json({ message: "Database unavailable." });
     }
 

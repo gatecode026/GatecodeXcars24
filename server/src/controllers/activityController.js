@@ -1,4 +1,4 @@
-import { isDatabaseReady } from "../config/db.js";
+import { ensureDB } from "../config/db.js";
 import { ActivityLog } from "../models/ActivityLog.js";
 
 /**
@@ -22,7 +22,7 @@ export const recordActivity = async ({
   metadata
 }) => {
   try {
-    if (!isDatabaseReady()) return null;
+    if (!await ensureDB()) return null;
     return await ActivityLog.create({
       performedBy,
       performedByName: performedByName || "User",
@@ -51,12 +51,13 @@ export const recordActivity = async ({
  */
 export const getActivities = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
+    const dbReady = await ensureDB();
+    if (!dbReady) {
+      
     }
 
-    const userId = req.user._id || req.user.id;
-    const userRole = req.user.role || "employee";
+    const userId = req.user?._id || req.user?.id || "";
+    const userRole = req.user?.role || "employee";
     const limit = Math.min(Number(req.query.limit) || 40, 100);
 
     const query = {};

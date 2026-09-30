@@ -1,9 +1,10 @@
-import { isDatabaseReady } from "../config/db.js";
+import { ensureDB } from "../config/db.js";
 import { ReturnRequest } from "../models/ReturnRequest.js";
 
 export const createReturnRequest = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
+    const dbReady = await ensureDB();
+    if (!dbReady) {
       return res.status(503).json({ message: "Database unavailable. Cannot create return request." });
     }
     const employeeId = req.user?._id || req.user?.id || null;
@@ -24,7 +25,11 @@ export const createReturnRequest = async (req, res, next) => {
 
 export const getReturnRequests = async (req, res, next) => {
   try {
-    const requests = await ReturnRequest.find().sort({ createdAt: -1 });
+    const dbReady = await ensureDB();
+    if (!dbReady) {
+      
+    }
+    const requests = await ReturnRequest.find().sort({ createdAt: -1 }).lean();
     return res.status(200).json({ data: requests });
   } catch (error) {
     return next(error);
@@ -33,7 +38,8 @@ export const getReturnRequests = async (req, res, next) => {
 
 export const updateReturn = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
+    const dbReady = await ensureDB();
+    if (!dbReady) {
       return res.status(503).json({ message: "Database unavailable. Cannot update return." });
     }
     const allowedFields = [
@@ -57,7 +63,8 @@ export const updateReturn = async (req, res, next) => {
 
 export const deleteReturn = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
+    const dbReady = await ensureDB();
+    if (!dbReady) {
       return res.status(503).json({ message: "Database unavailable. Cannot delete return." });
     }
     const request = await ReturnRequest.findByIdAndDelete(req.params.id);
@@ -72,7 +79,8 @@ export const deleteReturn = async (req, res, next) => {
 
 export const updateReturnStatus = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
+    const dbReady = await ensureDB();
+    if (!dbReady) {
       return res.status(503).json({ message: "Database unavailable. Cannot update return status." });
     }
     const request = await ReturnRequest.findByIdAndUpdate(

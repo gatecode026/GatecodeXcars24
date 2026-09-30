@@ -1,83 +1,261 @@
-import { isDatabaseReady } from "../config/db.js";
+import { ensureDB } from "../config/db.js";
 import { Customer } from "../models/Customer.js";
 import { User } from "../models/User.js";
 import { EmployeeRecord } from "../models/EmployeeRecord.js";
 import { recordActivity } from "./activityController.js";
 import { sendTLWhatsAppNotification } from "../services/whatsappNotificationService.js";
 
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute a Mongoose date-range object based on a named period or custom dates.
+ * Returns null when no period filter should be applied.
+ */
+const buildDateRange = (period, fromDate, toDate) => {
+  const now = new Date();
+  switch (period) {
+    case "today": {
+      const s = new Date(now); s.setHours(0, 0, 0, 0);
+      const e = new Date(now); e.setHours(23, 59, 59, 999);
+      return { $gte: s, $lte: e };
+    }
+    case "yesterday": {
+      const s = new Date(now); s.setDate(s.getDate() - 1); s.setHours(0, 0, 0, 0);
+      const e = new Date(s); e.setHours(23, 59, 59, 999);
+      return { $gte: s, $lte: e };
+    }
+    case "week": {
+      const s = new Date(now); s.setDate(s.getDate() - s.getDay()); s.setHours(0, 0, 0, 0);
+      const e = new Date(now); e.setHours(23, 59, 59, 999);
+      return { $gte: s, $lte: e };
+    }
+    case "month": {
+      const s = new Date(now.getFullYear(), now.getMonth(), 1); s.setHours(0, 0, 0, 0);
+      const e = new Date(now); e.setHours(23, 59, 59, 999);
+      return { $gte: s, $lte: e };
+    }
+    case "custom": {
+      const range = {};
+      if (fromDate) { const s = new Date(fromDate); s.setHours(0, 0, 0, 0); range.$gte = s; }
+      if (toDate)   { const e = new Date(toDate);   e.setHours(23, 59, 59, 999); range.$lte = e; }
+      return Object.keys(range).length > 0 ? range : null;
+    }
+    default:
+      return null; // "all" → no date filter
+  }
+};
+
+/**
+ * Build a Mongoose filter from request query params + user role.
+ * Role-based data scoping is always enforced here (backend authority).
+ *
+ * Supported query params:
+ *   dateType            : "leadDate" | "appointmentDate" | "createdAt" (default)
+ *   period              : "today" | "yesterday" | "week" | "month" | "custom" | "all"
+ *   fromDate, toDate    : ISO date strings used when period="custom"
+ *   verificationStatus  : exact string match
+ *   leadBy              : partial case-insensitive match
+ *   search              : searches customerName, mobile, carNumber, appointmentId, leadBy
+ *   employeeId          : (admin only) filter by specific employee
+ *   startDate, endDate  : legacy date range (used when period is absent)
+ */
+const buildCustomerFilter = (req) => {
+  const conditions = [];
+
+  // --- Role-based scoping (ALWAYS enforced on backend) ---
+  if (req.user?.role === "employee") {
+    conditions.push({ $or: [{ employeeId: req.user._id }, { assignedTo: req.user._id }] });
+  } else if (req.query.employeeId) {
+    conditions.push({ employeeId: req.query.employeeId });
+  }
+
+  // --- Date field selection ---
+  const VALID_DATE_TYPES = ["leadDate", "appointmentDate", "createdAt"];
+  const dateType = VALID_DATE_TYPES.includes(req.query.dateType)
+    ? req.query.dateType
+    : "createdAt";
+
+  // --- Period → date range ---
+  const period = req.query.period || "";
+  const dateRange = buildDateRange(period, req.query.fromDate, req.query.toDate);
+  if (dateRange) {
+    conditions.push({ [dateType]: dateRange });
+  } else if (!period && (req.query.startDate || req.query.endDate)) {
+    // Legacy support for old startDate/endDate params
+    const legacyRange = {};
+    if (req.query.startDate) {
+      const s = new Date(req.query.startDate); s.setHours(0, 0, 0, 0);
+      legacyRange.$gte = s;
+    }
+    if (req.query.endDate) {
+      const e = new Date(req.query.endDate); e.setHours(23, 59, 59, 999);
+      legacyRange.$lte = e;
+    }
+    if (Object.keys(legacyRange).length > 0) {
+      conditions.push({ [dateType]: legacyRange });
+    }
+  }
+
+  // --- Verification status filter ---
+  if (req.query.verificationStatus) {
+    conditions.push({ verificationStatus: req.query.verificationStatus });
+  }
+
+  // --- Lead By (executive) filter ---
+  if (req.query.leadBy) {
+    const name = String(req.query.leadBy).trim();
+    if (name) {
+      conditions.push({ leadBy: new RegExp(name, "i") });
+    }
+  }
+
+  // --- Full-text search across key fields ---
+  if (req.query.search) {
+    const q = String(req.query.search).trim();
+    if (q) {
+      const regex = new RegExp(q, "i");
+      conditions.push({
+        $or: [
+          { customerName: regex },
+          { mobile: regex },
+          { carNumber: regex },
+          { appointmentId: regex },
+          { leadBy: regex }
+        ]
+      });
+    }
+  }
+
+  if (conditions.length === 0) return {};
+  if (conditions.length === 1) return conditions[0];
+  return { $and: conditions };
+};
+
+/** Normalise a raw Customer document for consistent API output */
+const normalizeCustomer = (c) => ({
+  ...c,
+  appointmentId: c.appointmentId || `AP-${String(c._id).slice(-5).toUpperCase()}`,
+  leadBy: c.leadBy || c.employeeName || "Executive",
+  carNumber: c.carNumber || "-",
+  verificationStatus: c.verificationStatus || (c.verified ? "Verified" : "Pending"),
+  leadStatus: c.leadStatus || (c.followUp === "Converted" ? "Completed" : "Pending")
+});
+
+// ---------------------------------------------------------------------------
+// Controllers
+// ---------------------------------------------------------------------------
+
 export const getCustomers = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
+    const dbReady = await ensureDB();
+    if (!dbReady) {
+      
     }
 
-    const filter = {};
-    if (req.user?.role === "employee") {
-      filter.$or = [{ employeeId: req.user._id }, { assignedTo: req.user._id }];
-    } else if (req.query.employeeId) {
-      filter.employeeId = req.query.employeeId;
-    }
-
-    if (req.query.status) {
-      filter.$or = [
-        { verificationStatus: req.query.status },
-        { leadStatus: req.query.status },
-        { followUp: req.query.status }
-      ];
-    }
-
-    if (req.query.verified !== undefined) {
-      filter.verified = req.query.verified === "true" || req.query.verified === true;
-    }
-
-    if (req.query.startDate || req.query.endDate) {
-      filter.createdAt = {};
-      if (req.query.startDate) {
-        const s = new Date(req.query.startDate);
-        s.setHours(0, 0, 0, 0);
-        filter.createdAt.$gte = s;
-      }
-      if (req.query.endDate) {
-        const e = new Date(req.query.endDate);
-        e.setHours(23, 59, 59, 999);
-        filter.createdAt.$lte = e;
-      }
-    }
-
-    if (req.query.search) {
-      const q = String(req.query.search).trim();
-      const regex = new RegExp(q, "i");
-      const searchConditions = [
-        { customerName: regex },
-        { mobile: regex },
-        { carNumber: regex },
-        { appointmentId: regex },
-        { leadBy: regex }
-      ];
-      if (filter.$or) {
-        filter.$and = [{ $or: filter.$or }, { $or: searchConditions }];
-        delete filter.$or;
-      } else {
-        filter.$or = searchConditions;
-      }
-    }
-
+    const filter = buildCustomerFilter(req);
     const customers = await Customer.find(filter)
       .populate("assignedTo", "name email")
       .sort({ createdAt: -1 })
       .lean();
 
-    // Ensure appointmentId & leadBy fallbacks for legacy records
-    const normalized = customers.map((c) => ({
-      ...c,
-      appointmentId: c.appointmentId || `AP-${String(c._id).slice(-5).toUpperCase()}`,
-      leadBy: c.leadBy || c.employeeName || "Executive",
-      carNumber: c.carNumber || "-",
-      verificationStatus: c.verificationStatus || (c.verified ? "Verified" : "Pending"),
-      leadStatus: c.leadStatus || (c.followUp === "Converted" ? "Completed" : "Pending")
-    }));
+    return res.status(200).json({ data: customers.map(normalizeCustomer) });
+  } catch (error) {
+    return next(error);
+  }
+};
 
-    return res.status(200).json({ data: normalized });
+/**
+ * Export leads as a UTF-8 CSV file.
+ * Respects the same filters & role-based scoping as getCustomers.
+ * CSV includes BOM so Excel opens it correctly.
+ */
+export const exportCustomersCSV = async (req, res, next) => {
+  try {
+    const dbReady = await ensureDB();
+    if (!dbReady) {
+      
+    }
+
+    const filter = buildCustomerFilter(req);
+    const customers = await Customer.find(filter)
+      .populate("assignedTo", "name email")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const normalized = customers.map(normalizeCustomer);
+
+    // --- Date formatting helpers (ISO-safe, no locale dependency) ---
+    const pad = (n) => String(n).padStart(2, "0");
+    const fmtDate = (d) => {
+      if (!d) return "";
+      const dt = new Date(d);
+      if (isNaN(dt.getTime())) return "";
+      return `${pad(dt.getDate())}/${pad(dt.getMonth() + 1)}/${dt.getFullYear()}`;
+    };
+    const fmtTime = (d) => {
+      if (!d) return "";
+      const dt = new Date(d);
+      if (isNaN(dt.getTime())) return "";
+      return `${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+    };
+    const fmtDateTime = (d) => {
+      const date = fmtDate(d);
+      const time = fmtTime(d);
+      return date && time ? `${date} ${time}` : date || time || "";
+    };
+
+    // --- CSV escape ---
+    const esc = (val) => {
+      const s = String(val ?? "").trim();
+      if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+
+    const CSV_HEADERS = [
+      "Appointment ID",
+      "Lead Date",
+      "Appointment Date",
+      "Appointment Time",
+      "Car Number",
+      "Oddo Meter/KM",
+      "CX Name",
+      "Cx Mobile No.",
+      "Lead By",
+      "Follow Up Done By",
+      "Date of Follow-up",
+      "VERIFIED",
+      "Cx Expectation / Remarks",
+      "Timestamp (Created)"
+    ];
+
+    const rows = normalized.map((c) => [
+      c.appointmentId,
+      fmtDate(c.leadDate || c.createdAt),
+      fmtDate(c.appointmentDate),
+      fmtTime(c.appointmentDate),
+      c.carNumber || "",
+      c.odometerKm ? `${Number(c.odometerKm)} KM` : "0 KM",
+      c.customerName || "",
+      c.mobile || "",
+      c.leadBy || c.employeeName || "",
+      c.followUpBy || "",
+      fmtDate(c.followUpDate),
+      c.verificationStatus || (c.verified ? "Verified" : "Pending"),
+      c.remark || "",
+      fmtDateTime(c.createdAt)
+    ].map(esc).join(","));
+
+    const csvContent = [CSV_HEADERS.map(esc).join(","), ...rows].join("\r\n");
+    const filename = `GatecodeXcars24_Leads_${new Date().toISOString().split("T")[0]}.csv`;
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    // Prepend BOM (\uFEFF) so Excel recognises UTF-8 encoding
+    return res.send("\uFEFF" + csvContent);
   } catch (error) {
     return next(error);
   }
@@ -85,7 +263,8 @@ export const getCustomers = async (req, res, next) => {
 
 export const createCustomer = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
+    const dbReady = await ensureDB();
+    if (!dbReady) {
       return res.status(503).json({ message: "Database unavailable." });
     }
 
@@ -157,6 +336,8 @@ export const createCustomer = async (req, res, next) => {
       sendTLWhatsAppNotification(customer, "LEAD_CREATED").catch(() => {});
     } catch (_) {}
 
+    invalidateEmployeesListCache();
+
     return res.status(201).json({
       message: "Lead created successfully",
       data: customer
@@ -168,7 +349,8 @@ export const createCustomer = async (req, res, next) => {
 
 export const updateCustomer = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
+    const dbReady = await ensureDB();
+    if (!dbReady) {
       return res.status(503).json({ message: "Database unavailable." });
     }
 
@@ -272,6 +454,8 @@ export const updateCustomer = async (req, res, next) => {
       sendTLWhatsAppNotification(customer, dateChanged ? "APPOINTMENT_SCHEDULED" : "LEAD_UPDATED").catch(() => {});
     } catch (_) {}
 
+    invalidateEmployeesListCache();
+
     return res.status(200).json({
       message: "Lead updated successfully",
       data: customer
@@ -283,7 +467,8 @@ export const updateCustomer = async (req, res, next) => {
 
 export const deleteCustomer = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
+    const dbReady = await ensureDB();
+    if (!dbReady) {
       return res.status(503).json({ message: "Database unavailable." });
     }
 
@@ -334,16 +519,178 @@ export const deleteCustomer = async (req, res, next) => {
       });
     } catch (_) {}
 
+    invalidateEmployeesListCache();
+
     return res.status(200).json({ message: "Lead deleted successfully" });
   } catch (error) {
     return next(error);
   }
 };
 
+export const bulkImportCustomers = async (req, res, next) => {
+  try {
+    const dbReady = await ensureDB();
+    if (!dbReady) {
+      return res.status(503).json({ message: "Database unavailable." });
+    }
+
+    const { rows } = req.body;
+    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ message: "No data rows provided for import." });
+    }
+
+    const parseFlexibleDate = (str) => {
+      if (!str) return null;
+      const s = String(str).trim();
+      if (!s) return null;
+      if (s.includes("/")) {
+        const parts = s.split(/[\/\s:]+/);
+        if (parts.length >= 3) {
+          const day = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const year = parseInt(parts[2], 10);
+          const hour = parts[3] ? parseInt(parts[3], 10) : 0;
+          const minute = parts[4] ? parseInt(parts[4], 10) : 0;
+          const dt = new Date(year, month, day, hour, minute);
+          if (!isNaN(dt.getTime())) return dt;
+        }
+      }
+      const dt = new Date(s);
+      return isNaN(dt.getTime()) ? null : dt;
+    };
+
+    const getVal = (row, ...keys) => {
+      for (const k of keys) {
+        if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== "") {
+          return String(row[k]).trim();
+        }
+        // Case-insensitive fallback
+        const lowerK = k.toLowerCase().replace(/[^a-z0-9]/g, "");
+        for (const actualKey of Object.keys(row)) {
+          if (actualKey.toLowerCase().replace(/[^a-z0-9]/g, "") === lowerK) {
+            if (row[actualKey] !== undefined && row[actualKey] !== null && String(row[actualKey]).trim() !== "") {
+              return String(row[actualKey]).trim();
+            }
+          }
+        }
+      }
+      return "";
+    };
+
+    const currentUserId = req.user?._id || req.user?.id;
+    const currentUserName = req.user?.name || "Employee";
+
+    let insertedCount = 0;
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const customerName = getVal(r, "CX Name", "Customer Name", "cx_name", "customerName", "Name");
+      const mobile = getVal(r, "Cx Mobile No.", "Mobile", "mobile", "mobileNumber", "Phone", "Phone Number");
+
+      if (!customerName && !mobile) {
+        continue; // Skip blank lines
+      }
+
+      try {
+        const rawOdo = getVal(r, "Oddo Meter/KM", "odometerKm", "Odometer", "KM", "Oddo Meter");
+        const cleanOdo = Number(rawOdo.replace(/[^0-9.]/g, "")) || 0;
+
+        const rawLeadDate = getVal(r, "Lead Date", "leadDate", "Date");
+        const leadDate = parseFlexibleDate(rawLeadDate) || new Date();
+
+        const rawAptDate = getVal(r, "Appointment Date", "appointmentDate");
+        const rawAptTime = getVal(r, "Appointment Time");
+        let appointmentDate = parseFlexibleDate(rawAptDate);
+        if (appointmentDate && rawAptTime && rawAptTime.includes(":")) {
+          const [h, m] = rawAptTime.split(":").map((v) => parseInt(v, 10));
+          if (!isNaN(h) && !isNaN(m)) {
+            appointmentDate.setHours(h, m, 0, 0);
+          }
+        }
+
+        const rawFollowUpDate = getVal(r, "Date of Follow-up", "followUpDate", "Follow Up Date");
+        const followUpDate = parseFlexibleDate(rawFollowUpDate);
+
+        const leadBy = getVal(r, "Lead By", "leadBy") || currentUserName;
+        const followUpBy = getVal(r, "Follow Up Done By", "followUpBy", "Follow Up By") || "";
+        const carNumber = getVal(r, "Car Number", "carNumber", "Car No").toUpperCase();
+        const appointmentId = getVal(r, "Appointment ID", "appointmentId");
+        const remark = getVal(r, "Cx Expectation / Remarks", "remark", "Remarks", "Remark", "Notes");
+        const email = getVal(r, "Email", "email");
+        const rawVerification = getVal(r, "VERIFIED", "verificationStatus", "Verification Status", "Status");
+
+        let verificationStatus = "Pending";
+        let verified = false;
+        if (rawVerification) {
+          const vLower = rawVerification.toLowerCase();
+          if (vLower === "verified" || vLower === "yes" || vLower === "true") {
+            verificationStatus = "Verified";
+            verified = true;
+          } else if (vLower.includes("follow")) {
+            verificationStatus = "Follow-up";
+            verified = false;
+          } else if (vLower.includes("reject")) {
+            verificationStatus = "Rejected";
+            verified = false;
+          }
+        }
+
+        await Customer.create({
+          employeeId: currentUserId,
+          employeeName: currentUserName,
+          customerName: customerName || "Customer",
+          mobile: mobile || "-",
+          email,
+          remark,
+          appointmentId: appointmentId || undefined,
+          leadDate,
+          appointmentDate,
+          carNumber,
+          leadBy,
+          followUpBy,
+          followUpDate,
+          verified,
+          verificationStatus,
+          odometerKm: cleanOdo,
+          leadStatus: verificationStatus === "Verified" ? "Verified" : verificationStatus === "Follow-up" ? "Follow-up" : "Pending"
+        });
+
+        insertedCount++;
+      } catch (rowErr) {
+        errors.push({ row: i + 1, error: rowErr.message });
+      }
+    }
+
+    invalidateEmployeesListCache();
+
+    return res.status(200).json({
+      message: `Successfully imported ${insertedCount} lead(s).`,
+      count: insertedCount,
+      errors: errors.length > 0 ? errors.slice(0, 5) : []
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+let cachedEmployeesList = null;
+let cachedEmployeesListTime = 0;
+const EMPLOYEES_CACHE_TTL_MS = 30 * 1000;
+
+export const invalidateEmployeesListCache = () => {
+  cachedEmployeesList = null;
+};
+
 export const getEmployeesList = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
-      return res.status(503).json({ message: "Database unavailable." });
+    if (cachedEmployeesList && Date.now() - cachedEmployeesListTime < EMPLOYEES_CACHE_TTL_MS) {
+      return res.status(200).json(cachedEmployeesList);
+    }
+
+    const dbReady = await ensureDB();
+    if (!dbReady) {
+      
     }
     const users = await User.find({}, "_id name email role")
       .sort({ name: 1 })
@@ -365,12 +712,18 @@ export const getEmployeesList = async (req, res, next) => {
 
     const sortedNames = Array.from(namesSet).sort((a, b) => a.localeCompare(b));
 
-    return res.status(200).json({
+    const result = {
       data: sortedNames,
       users: users.map((u) => ({ id: u._id, name: u.name, role: u.role }))
-    });
+    };
+
+    cachedEmployeesList = result;
+    cachedEmployeesListTime = Date.now();
+
+    return res.status(200).json(result);
   } catch (error) {
     return next(error);
   }
 };
+
 

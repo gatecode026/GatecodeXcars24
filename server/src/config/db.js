@@ -1,7 +1,8 @@
 import mongoose from "mongoose";
 import dns from "node:dns/promises";
 
-dns.setServers(['1.1.1.1']);
+export const DEFAULT_MONGO_URI =
+  "mongodb+srv://gatecode026:tBNyNzO68BNn3Zkn@cluster0.1meot8l.mongodb.net/bpo-management";
 
 export const isDatabaseReady = () => mongoose.connection.readyState === 1;
 
@@ -17,18 +18,40 @@ const sanitizeMongoUri = (uri) => {
   return uri;
 };
 
-export const connectDB = async (timeoutMs = 10000) => {
+export const connectDB = async (timeoutMs = 15000) => {
   if (mongoose.connection.readyState === 1) {
     return;
   }
-  const rawUri = process.env.MONGO_URI;
-  if (!rawUri) {
-    throw new Error("MONGO_URI is missing in environment variables.");
-  }
+  const rawUri = process.env.MONGO_URI || DEFAULT_MONGO_URI;
   const mongoUri = sanitizeMongoUri(rawUri);
   await Promise.race([
-    mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000, connectTimeoutMS: 5000 }),
-    new Promise((_, reject) => setTimeout(() => reject(new Error("MongoDB connection timed out")), timeoutMs))
+    mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 15000,
+      connectTimeoutMS: 15000,
+      maxPoolSize: 10,
+      socketTimeoutMS: 45000
+    }),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("MongoDB connection timed out")), timeoutMs)
+    )
   ]);
   console.log("MongoDB connected");
+};
+
+export const ensureDB = async () => {
+  if (isDatabaseReady()) return true;
+  try {
+    await connectDB(15000);
+  } catch (err) {
+    console.error("ensureDB primary connect attempt:", err?.message || err);
+    if (!isDatabaseReady()) {
+      try {
+        dns.setServers(["1.1.1.1", "8.8.8.8"]);
+        await connectDB(15000);
+      } catch (err2) {
+        console.error("ensureDB fallback connect attempt:", err2?.message || err2);
+      }
+    }
+  }
+  return isDatabaseReady();
 };

@@ -1,4 +1,4 @@
-import { isDatabaseReady } from "../config/db.js";
+import { ensureDB } from "../config/db.js";
 import { Order } from "../models/Order.js";
 import { ReturnRequest } from "../models/ReturnRequest.js";
 import { CallingRecord } from "../models/CallingRecord.js";
@@ -56,11 +56,11 @@ export const getEmployeePerformance = async (req, res, next) => {
     const { filter = "today", startDate, endDate } = req.query;
     const { start, end } = getDateRange(filter, startDate, endDate);
 
-    const employees = await User.find({ role: "employee" }, { name: 1, email: 1, username: 1 });
+    const employees = await User.find({ role: "employee" }, { name: 1, email: 1, username: 1 }).lean();
 
     const performance = await Promise.all(
       employees.map(async (emp) => {
-        const [ordersToday, returnsToday, totalEntries] = await Promise.all([
+        const [ordersToday, returnsToday] = await Promise.all([
           Order.countDocuments({
             employeeId: emp._id,
             createdAt: { $gte: start, $lte: end }
@@ -68,11 +68,7 @@ export const getEmployeePerformance = async (req, res, next) => {
           ReturnRequest.countDocuments({
             employeeId: emp._id,
             createdAt: { $gte: start, $lte: end }
-          }),
-          Promise.all([
-            Order.countDocuments({ employeeId: emp._id, createdAt: { $gte: start, $lte: end } }),
-            ReturnRequest.countDocuments({ employeeId: emp._id, createdAt: { $gte: start, $lte: end } })
-          ]).then(([o, r]) => o + r)
+          })
         ]);
 
         return {
@@ -82,7 +78,7 @@ export const getEmployeePerformance = async (req, res, next) => {
           username: emp.username,
           ordersToday,
           returnsToday,
-          totalEntries
+          totalEntries: ordersToday + returnsToday
         };
       })
     );
@@ -113,8 +109,8 @@ export const getEmployeeHistory = async (req, res, next) => {
     }
 
     const [orders, returns] = await Promise.all([
-      Order.find(filter).sort({ createdAt: -1 }),
-      ReturnRequest.find(filter).sort({ createdAt: -1 })
+      Order.find(filter).sort({ createdAt: -1 }).lean(),
+      ReturnRequest.find(filter).sort({ createdAt: -1 }).lean()
     ]);
 
     return res.status(200).json({ data: { orders, returns } });
@@ -148,7 +144,7 @@ export const getEmployeeDetails = async (req, res, next) => {
     const { id } = req.params;
     const { startDate, endDate } = req.query;
 
-    const employee = await User.findById(id).select("-password");
+    const employee = await User.findById(id).select("-password").lean();
     if (!employee) {
       return res.status(404).json({ message: "Employee not found" });
     }
@@ -159,10 +155,10 @@ export const getEmployeeDetails = async (req, res, next) => {
     const customerFilter = { employeeId: id, ...buildDateFilter(startDate, endDate) };
 
     const [orders, returns, callingRecords, customers] = await Promise.all([
-      Order.find(orderFilter).sort({ createdAt: -1 }),
-      ReturnRequest.find(returnFilter).sort({ createdAt: -1 }),
-      CallingRecord.find(callFilter).sort({ date: -1, createdAt: -1 }),
-      Customer.find(customerFilter).sort({ createdAt: -1 })
+      Order.find(orderFilter).sort({ createdAt: -1 }).lean(),
+      ReturnRequest.find(returnFilter).sort({ createdAt: -1 }).lean(),
+      CallingRecord.find(callFilter).sort({ date: -1, createdAt: -1 }).lean(),
+      Customer.find(customerFilter).sort({ createdAt: -1 }).lean()
     ]);
 
     return res.status(200).json({
@@ -181,7 +177,8 @@ export const getEmployeeDetails = async (req, res, next) => {
 
 export const getRevenueSummary = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
+    const dbReady = await ensureDB();
+    if (!dbReady) {
       return res.status(503).json({ message: "Database unavailable." });
     }
 
@@ -309,7 +306,8 @@ export const getEmployeeSummary = async (req, res, next) => {
 
 export const getSalesSummary = async (req, res, next) => {
   try {
-    if (!isDatabaseReady()) {
+    const dbReady = await ensureDB();
+    if (!dbReady) {
       return res.status(503).json({ message: "Database unavailable." });
     }
 

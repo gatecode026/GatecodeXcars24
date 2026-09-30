@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { connectDB } from "./config/db.js";
+import { connectDB, DEFAULT_MONGO_URI } from "./config/db.js";
 import { ensureFixedAdminUser } from "./config/seedAdmin.js";
 
 function loadEnvFallback() {
@@ -30,6 +30,9 @@ function loadEnvFallback() {
 loadEnvFallback();
 if (!process.env.JWT_SECRET) {
   process.env.JWT_SECRET = "mySuperSecretKey123";
+}
+if (!process.env.MONGO_URI) {
+  process.env.MONGO_URI = DEFAULT_MONGO_URI;
 }
 
 let adminSeeded = false;
