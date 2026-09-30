@@ -91,8 +91,6 @@ const RegisterPage = () => {
     if (!form.email.trim()) next.email = "Email address is required";
     else if (!/\S+@\S+\.\S+/.test(form.email)) next.email = "Enter a valid email address";
 
-    if (!form.username.trim()) next.username = "Username is required";
-
     if (!isEdit) {
       if (!form.password) next.password = "Password is required";
       else if (form.password.length < 6) next.password = "Password must be at least 6 characters";
@@ -122,11 +120,14 @@ const RegisterPage = () => {
       if (isEdit) {
         const payload = { ...form };
         if (!payload.password) delete payload.password;
+        if (!payload.username) delete payload.username;
         await api.put(`/auth/users/${id}`, payload);
         alert("User updated successfully!");
         navigate("/admin/users");
       } else {
-        await api.post("/auth/register", form);
+        const payload = { ...form };
+        if (!payload.username) delete payload.username;
+        await api.post("/auth/register", payload);
         alert("Employee registered successfully!");
         navigate("/admin/users");
       }
@@ -219,7 +220,7 @@ const RegisterPage = () => {
                 </div>
               </div>
 
-              <div className="form-grid-2" style={{ marginTop: "12px" }}>
+              <div style={{ marginTop: "12px" }}>
                 <div className="form-group">
                   <label className="form-label">Email Address *</label>
                   <input
@@ -231,19 +232,6 @@ const RegisterPage = () => {
                     required
                   />
                   {errors.email && <span style={{ color: "#ef4444", fontSize: "11.5px", marginTop: "4px", display: "block" }}>{errors.email}</span>}
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Username *</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="e.g. ramesh_24"
-                    value={form.username}
-                    onChange={(e) => onChange("username", e.target.value)}
-                    required
-                  />
-                  {errors.username && <span style={{ color: "#ef4444", fontSize: "11.5px", marginTop: "4px", display: "block" }}>{errors.username}</span>}
                 </div>
               </div>
             </div>

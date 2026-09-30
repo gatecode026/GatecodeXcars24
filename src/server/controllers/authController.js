@@ -49,7 +49,8 @@ export const registerUser = async (req, res, next) => {
     const { name, email, password, phoneNumber, username, role } = req.body;
     const assignedRole = ["admin", "tl", "employee"].includes(role) ? role : "employee";
 
-    const existing = await User.findOne({ $or: [{ email }, { username }] });
+    const cleanUsername = username && typeof username === "string" && username.trim() ? username.trim() : undefined;
+    const existing = await User.findOne(cleanUsername ? { $or: [{ email }, { username: cleanUsername }] } : { email });
     if (existing) {
       if (existing.isDeleted) {
         existing.isDeleted = false;
@@ -57,6 +58,7 @@ export const registerUser = async (req, res, next) => {
         existing.name = name;
         existing.phoneNumber = phoneNumber;
         existing.role = assignedRole;
+        if (cleanUsername) existing.username = cleanUsername;
         existing.password = await bcrypt.hash(password, 10);
         await existing.save();
         invalidateEmployeesListCache();
@@ -83,7 +85,7 @@ export const registerUser = async (req, res, next) => {
       email,
       password: hashedPassword,
       phoneNumber,
-      username,
+      ...(cleanUsername ? { username: cleanUsername } : {}),
       role: assignedRole,
       isDeleted: false
     });
@@ -188,8 +190,8 @@ export const updateUser = async (req, res, next) => {
       const existing = await User.findOne({ email });
       if (existing) return res.status(409).json({ message: "Email already in use" });
     }
-    if (username && username !== user.username) {
-      const existing = await User.findOne({ username });
+    if (username && typeof username === "string" && username.trim() && username.trim() !== user.username) {
+      const existing = await User.findOne({ username: username.trim() });
       if (existing) return res.status(409).json({ message: "Username already in use" });
     }
 
@@ -197,7 +199,7 @@ export const updateUser = async (req, res, next) => {
     if (name !== undefined && name.trim()) user.name = name.trim();
     if (email !== undefined && email.trim()) user.email = email.trim().toLowerCase();
     if (phoneNumber !== undefined) user.phoneNumber = phoneNumber.trim();
-    if (username !== undefined) user.username = username.trim();
+    if (username !== undefined && typeof username === "string" && username.trim()) user.username = username.trim();
     if (role !== undefined) user.role = role;
     if (password && password.trim()) {
       user.password = await bcrypt.hash(password, 10);

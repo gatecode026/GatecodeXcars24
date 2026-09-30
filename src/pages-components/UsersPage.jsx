@@ -230,7 +230,7 @@ const UsersPage = () => {
             <input
               type="text"
               className="form-control"
-              placeholder="Search by name, email, username or phone..."
+              placeholder="Search by name, email or phone..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{ paddingLeft: "36px" }}
@@ -250,7 +250,6 @@ const UsersPage = () => {
               <tr>
                 <th>Employee Name</th>
                 <th>Email Address</th>
-                <th>Username</th>
                 <th>Phone Number</th>
                 <th>Role</th>
                 <th>Registered Date</th>
@@ -260,7 +259,7 @@ const UsersPage = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: "center", padding: "48px 24px", color: "var(--text-muted)" }}>
+                  <td colSpan={6} style={{ textAlign: "center", padding: "48px 24px", color: "var(--text-muted)" }}>
                     <div style={{ display: "inline-flex", alignItems: "center", gap: "10px" }}>
                       <div className="spinner-border" />
                       Loading employees database...
@@ -269,7 +268,7 @@ const UsersPage = () => {
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: "center", padding: "48px 24px", color: "var(--text-muted)" }}>
+                  <td colSpan={6} style={{ textAlign: "center", padding: "48px 24px", color: "var(--text-muted)" }}>
                     {search ? "No employees match your search criteria." : "No registered employees found."}
                   </td>
                 </tr>
@@ -302,11 +301,6 @@ const UsersPage = () => {
                     </td>
                     <td>
                       <span style={{ fontSize: "12.5px", color: "var(--text)" }}>{u.email}</span>
-                    </td>
-                    <td>
-                      <span style={{ fontSize: "12px", fontFamily: "monospace", color: "var(--text-muted)", fontWeight: 500 }}>
-                        {u.username ? `@${u.username}` : "-"}
-                      </span>
                     </td>
                     <td>
                       <span style={{ fontSize: "12.5px", color: "var(--text-heading)", fontWeight: 500 }}>
@@ -400,10 +394,6 @@ const UsersPage = () => {
                 <div className="detail-label-val">
                   <span className="detail-label">Phone Number</span>
                   <span className="detail-value">{viewUser.phoneNumber || "Not provided"}</span>
-                </div>
-                <div className="detail-label-val">
-                  <span className="detail-label">Username</span>
-                  <span className="detail-value">{viewUser.username || "Not assigned"}</span>
                 </div>
               </div>
 
