@@ -59,9 +59,14 @@ const initialState = {
   alternateMobileNumber: "",
   fullAddress: "",
   pincode: "",
-  productType: "GPS",
+  carModel: "",
+  carNumber: "",
+  productType: "Sedan",
+  fuelType: "Petrol",
+  manufacturingYear: "",
+  odometerKm: "",
   customProductName: "",
-  numberOfUnits: "",
+  numberOfUnits: "1",
   amount: "",
   advanceAmount: "",
   description: "",
@@ -307,7 +312,6 @@ const EmployeeOrderPage = () => {
     if (candidate.productType === "Other" && !candidate.customProductName.trim()) {
       next.customProductName = "Custom product name is required";
     }
-    if (!candidate.bankName) next.bankName = "Bank name is required";
     if (!candidate.numberOfUnits || Number(candidate.numberOfUnits) <= 0) next.numberOfUnits = "Units must be > 0";
     if (candidate.amount === "" || Number(candidate.amount) < 0) next.amount = "Amount must be positive";
     if (candidate.advanceAmount === "" || Number(candidate.advanceAmount) < 0) {
@@ -358,9 +362,14 @@ const EmployeeOrderPage = () => {
       alternateMobileNumber: o.alternateMobileNumber || "",
       fullAddress: o.fullAddress || "",
       pincode: o.pincode || "",
-      productType: o.productType || "GPS",
+      carModel: o.carModel || "",
+      carNumber: o.carNumber || "",
+      productType: o.productType || "Sedan",
+      fuelType: o.fuelType || "Petrol",
+      manufacturingYear: o.manufacturingYear || "",
+      odometerKm: o.odometerKm || "",
       customProductName: o.customProductName || "",
-      numberOfUnits: o.numberOfUnits || "",
+      numberOfUnits: String(o.numberOfUnits || 1),
       amount: o.amount || "",
       advanceAmount: o.advanceAmount || "",
       description: o.description || "",
@@ -396,14 +405,16 @@ const EmployeeOrderPage = () => {
       "Alt Mobile",
       "Full Address",
       "Pincode",
-      "Product Type",
+      "Car Model",
+      "Car Number",
+      "Body Type",
+      "Fuel Type",
+      "Mfg Year",
+      "Odometer",
       "Units",
-      "Amount",
+      "Deal Price",
       "Advance Amount",
       "Order Status",
-      "Parcel Status",
-      "Tracking ID",
-      "Courier Company",
       "Date",
     ];
     const rows = recentOrders.map((o) => [
@@ -412,14 +423,16 @@ const EmployeeOrderPage = () => {
       o.alternateMobileNumber || "-",
       o.fullAddress || "-",
       o.pincode || "-",
+      o.carModel || "-",
+      o.carNumber || "-",
       o.productType || "-",
+      o.fuelType || "-",
+      o.manufacturingYear || "-",
+      o.odometerKm || "-",
       o.numberOfUnits || 1,
       o.amount || 0,
       o.advanceAmount || 0,
       o.orderStatus || "Pending",
-      o.parcelStatus || "Pending",
-      o.trackingId || "-",
-      o.courierCompany || "-",
       o.createdAt ? new Date(o.createdAt).toISOString().split("T")[0] : "-",
     ]);
     exportTableToCsv(`Orders_${new Date().toISOString().split("T")[0]}.csv`, headers, rows);
@@ -443,9 +456,14 @@ const EmployeeOrderPage = () => {
       if (form.alternateMobileNumber) payload.append("alternateMobileNumber", form.alternateMobileNumber);
       payload.append("fullAddress", form.fullAddress);
       payload.append("pincode", form.pincode);
+      payload.append("carModel", form.carModel);
+      payload.append("carNumber", form.carNumber);
+      payload.append("fuelType", form.fuelType);
+      payload.append("manufacturingYear", form.manufacturingYear);
+      payload.append("odometerKm", form.odometerKm);
       payload.append("productType", form.productType);
       payload.append("customProductName", form.customProductName);
-      payload.append("numberOfUnits", String(Number(form.numberOfUnits)));
+      payload.append("numberOfUnits", String(Number(form.numberOfUnits || 1)));
       payload.append("amount", String(Number(form.amount)));
       payload.append("totalAmount", String(totalAmount));
       payload.append("advanceAmount", String(Number(form.advanceAmount)));
@@ -463,9 +481,14 @@ const EmployeeOrderPage = () => {
           alternateMobileNumber: form.alternateMobileNumber,
           fullAddress: form.fullAddress,
           pincode: form.pincode,
+          carModel: form.carModel,
+          carNumber: form.carNumber,
+          fuelType: form.fuelType,
+          manufacturingYear: form.manufacturingYear,
+          odometerKm: form.odometerKm,
           productType: form.productType,
           customProductName: form.customProductName,
-          numberOfUnits: Number(form.numberOfUnits),
+          numberOfUnits: Number(form.numberOfUnits || 1),
           amount: Number(form.amount),
           totalAmount,
           advanceAmount: Number(form.advanceAmount),
@@ -651,9 +674,10 @@ const EmployeeOrderPage = () => {
               <tr>
                 <th>CUSTOMER</th>
                 <th>MOBILE</th>
-                <th>PRODUCT</th>
-                <th>UNITS</th>
-                <th>TOTAL</th>
+                <th>VEHICLE / MODEL</th>
+                <th>REG. NO</th>
+                <th>DEAL PRICE</th>
+                <th>ADVANCE</th>
                 <th>STATUS</th>
                 <th>DATE</th>
                 <th style={{ textAlign: "center" }}>ACTIONS</th>
@@ -665,17 +689,18 @@ const EmployeeOrderPage = () => {
                   <tr key={`skel-${idx}`}>
                     <td><div className="skeleton-box" style={{ width: "120px", height: "14px" }} /></td>
                     <td><div className="skeleton-box" style={{ width: "90px", height: "14px" }} /></td>
-                    <td><div className="skeleton-box" style={{ width: "80px", height: "14px" }} /></td>
-                    <td><div className="skeleton-box" style={{ width: "30px", height: "14px" }} /></td>
-                    <td><div className="skeleton-box" style={{ width: "80px", height: "14px" }} /></td>
-                    <td><div className="skeleton-box" style={{ width: "70px", height: "20px", borderRadius: "10px" }} /></td>
                     <td><div className="skeleton-box" style={{ width: "100px", height: "14px" }} /></td>
+                    <td><div className="skeleton-box" style={{ width: "80px", height: "14px" }} /></td>
+                    <td><div className="skeleton-box" style={{ width: "80px", height: "14px" }} /></td>
+                    <td><div className="skeleton-box" style={{ width: "70px", height: "14px" }} /></td>
+                    <td><div className="skeleton-box" style={{ width: "70px", height: "20px", borderRadius: "10px" }} /></td>
+                    <td><div className="skeleton-box" style={{ width: "90px", height: "14px" }} /></td>
                     <td style={{ textAlign: "center" }}><div className="skeleton-box" style={{ width: "60px", height: "24px", margin: "0 auto" }} /></td>
                   </tr>
                 ))
               ) : filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: "center", color: "var(--text-muted)", padding: "36px 16px" }}>
+                  <td colSpan={9} style={{ textAlign: "center", color: "var(--text-muted)", padding: "36px 16px" }}>
                     <div style={{ fontSize: "14px", fontWeight: 500 }}>No matching orders found</div>
                     <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
                       Create a new customer order or adjust your date filter.
@@ -690,13 +715,25 @@ const EmployeeOrderPage = () => {
                       <span style={{ fontFamily: "monospace", fontSize: "12.5px" }}>{o.mobileNumber}</span>
                     </td>
                     <td>
-                      <span className="badge badge-gray" style={{ fontSize: "11px" }}>
-                        {o.productType === "Other" && o.customProductName ? o.customProductName : o.productType}
-                      </span>
+                      <div style={{ fontWeight: 600, color: "var(--text-heading)", fontSize: "12.5px" }}>
+                        {o.carModel || o.productType || "-"}
+                      </div>
+                      {o.fuelType && (
+                        <small style={{ color: "var(--text-muted)", fontSize: "11px" }}>{o.fuelType} • {o.productType}</small>
+                      )}
                     </td>
-                    <td style={{ fontWeight: 600 }}>{o.numberOfUnits}</td>
+                    <td>
+                      {o.carNumber ? (
+                        <span className="badge badge-gray" style={{ fontSize: "11px", fontWeight: 600, textTransform: "uppercase" }}>
+                          {o.carNumber}
+                        </span>
+                      ) : "-"}
+                    </td>
                     <td style={{ fontWeight: 600, color: "var(--text-heading)" }}>
-                      ₹{Number(o.totalAmount || 0).toLocaleString("en-IN")}
+                      ₹{Number(o.totalAmount || o.amount || 0).toLocaleString("en-IN")}
+                    </td>
+                    <td style={{ fontWeight: 600, color: "#16a34a" }}>
+                      ₹{Number(o.advanceAmount || 0).toLocaleString("en-IN")}
                     </td>
                     <td>{statusBadge(o.orderStatus)}</td>
                     <td style={{ fontSize: "12px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
@@ -905,67 +942,112 @@ const EmployeeOrderPage = () => {
                   </div>
                 </div>
 
-                {/* 2. Product & Order Financials */}
+                {/* 2. Vehicle / Car Details & Financials */}
                 <div className="compact-section-box">
                   <div className="compact-section-title">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <circle cx="9" cy="21" r="1" />
-                      <circle cx="20" cy="21" r="1" />
-                      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 17h14v-5l-2-6H7L5 12v5z" />
+                      <circle cx="7.5" cy="17.5" r="2.5" />
+                      <circle cx="16.5" cy="17.5" r="2.5" />
                     </svg>
-                    <span>2. Product &amp; Order Financials</span>
+                    <span>2. Vehicle / Car Details &amp; Financials</span>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: form.productType === "Other" ? "1fr 1fr 0.8fr 1fr" : "1.2fr 0.8fr 1fr", gap: "10px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: "10px" }}>
                     <div className="form-group">
-                      <label className="form-label">Product Type *</label>
+                      <label className="form-label">Car Model &amp; Variant *</label>
+                      <input
+                        type="text"
+                        className={`form-control ${errors.carModel ? "is-invalid" : ""}`}
+                        placeholder="e.g. Maruti Swift Dzire VXi"
+                        required
+                        value={form.carModel}
+                        onChange={(e) => onChange("carModel", e.target.value)}
+                      />
+                      {errors.carModel && <small className="error-text">{errors.carModel}</small>}
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Car Registration No. *</label>
+                      <input
+                        type="text"
+                        className={`form-control ${errors.carNumber ? "is-invalid" : ""}`}
+                        placeholder="e.g. DL-01-AB-1234"
+                        style={{ textTransform: "uppercase" }}
+                        required
+                        value={form.carNumber}
+                        onChange={(e) => onChange("carNumber", e.target.value.toUpperCase())}
+                      />
+                      {errors.carNumber && <small className="error-text">{errors.carNumber}</small>}
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Body Type / Category *</label>
                       <select
                         className="form-control"
                         value={form.productType}
                         onChange={(e) => onChange("productType", e.target.value)}
                       >
-                        <option value="GPS">GPS</option>
-                        <option value="Vending Machine">Vending Machine</option>
-                        <option value="Disposal">Disposal</option>
+                        <option value="Sedan">Sedan</option>
+                        <option value="Hatchback">Hatchback</option>
+                        <option value="SUV">SUV</option>
+                        <option value="Compact SUV">Compact SUV</option>
+                        <option value="MUV">MUV</option>
+                        <option value="Luxury">Luxury</option>
+                        <option value="Commercial">Commercial</option>
                         <option value="Other">Other</option>
                       </select>
                     </div>
+                  </div>
 
-                    {form.productType === "Other" && (
-                      <div className="form-group">
-                        <label className="form-label">Custom Product Name *</label>
-                        <input
-                          type="text"
-                          className={`form-control ${errors.customProductName ? "is-invalid" : ""}`}
-                          placeholder="e.g. Dashcam"
-                          required
-                          value={form.customProductName}
-                          onChange={(e) => onChange("customProductName", e.target.value)}
-                        />
-                        {errors.customProductName && <small className="error-text">{errors.customProductName}</small>}
-                      </div>
-                    )}
-
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginTop: "8px" }}>
                     <div className="form-group">
-                      <label className="form-label">Number of Units *</label>
-                      <input
-                        type="text"
-                        className={`form-control ${errors.numberOfUnits ? "is-invalid" : ""}`}
-                        placeholder="e.g. 1"
-                        inputMode="numeric"
-                        required
-                        value={form.numberOfUnits}
-                        onKeyDown={preventNonNumericKey}
-                        onChange={(e) => onChange("numberOfUnits", sanitizeDigits(e.target.value, 6))}
-                      />
-                      {errors.numberOfUnits && <small className="error-text">{errors.numberOfUnits}</small>}
+                      <label className="form-label">Fuel Type</label>
+                      <select
+                        className="form-control"
+                        value={form.fuelType}
+                        onChange={(e) => onChange("fuelType", e.target.value)}
+                      >
+                        <option value="Petrol">Petrol</option>
+                        <option value="Diesel">Diesel</option>
+                        <option value="CNG">CNG</option>
+                        <option value="Electric">Electric</option>
+                        <option value="Hybrid">Hybrid</option>
+                      </select>
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">Amount per Unit (₹) *</label>
+                      <label className="form-label">Manufacturing Year</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. 2021"
+                        maxLength={4}
+                        inputMode="numeric"
+                        value={form.manufacturingYear}
+                        onChange={(e) => onChange("manufacturingYear", sanitizeDigits(e.target.value, 4))}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Odometer (KM)</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. 45000"
+                        inputMode="numeric"
+                        value={form.odometerKm}
+                        onChange={(e) => onChange("odometerKm", sanitizeDigits(e.target.value, 7))}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "10px", marginTop: "8px" }}>
+                    <div className="form-group">
+                      <label className="form-label">Car Deal Price (₹) *</label>
                       <input
                         type="text"
                         className={`form-control ${errors.amount ? "is-invalid" : ""}`}
-                        placeholder="e.g. 3500"
+                        placeholder="e.g. 450000"
                         inputMode="decimal"
                         required
                         value={form.amount}
@@ -973,182 +1055,58 @@ const EmployeeOrderPage = () => {
                       />
                       {errors.amount && <small className="error-text">{errors.amount}</small>}
                     </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Advance / Token Amount (₹) *</label>
+                      <input
+                        type="text"
+                        className={`form-control ${errors.advanceAmount ? "is-invalid" : ""}`}
+                        placeholder="e.g. 25000"
+                        inputMode="decimal"
+                        required
+                        value={form.advanceAmount}
+                        onChange={(e) => onChange("advanceAmount", sanitizePositiveNumber(e.target.value))}
+                      />
+                      {errors.advanceAmount && <small className="error-text">{errors.advanceAmount}</small>}
+                    </div>
                   </div>
 
                   {/* Summary Bar */}
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "1fr 1fr 1fr 1fr",
+                      gridTemplateColumns: "1fr 1fr 1fr",
                       gap: "10px",
-                      background: "#ffffff",
-                      padding: "10px 12px",
+                      background: "#f8fafc",
+                      padding: "10px 14px",
                       borderRadius: "8px",
                       border: "1px solid #e2e8f0",
-                      marginTop: "4px",
+                      marginTop: "10px",
                     }}
                   >
                     <div>
-                      <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block" }}>Total Amount</span>
-                      <strong style={{ fontSize: "14px", color: "var(--text-heading)" }}>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block" }}>Total Deal Price</span>
+                      <strong style={{ fontSize: "15px", color: "var(--text-heading)" }}>
                         ₹{totalAmount.toLocaleString("en-IN")}
                       </strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block" }}>Estimated Incentive</span>
-                      <strong style={{ fontSize: "14px", color: "#16a34a" }}>
-                        ₹{Math.round(incentive).toLocaleString("en-IN")}
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block" }}>Advance Paid</span>
+                      <strong style={{ fontSize: "15px", color: "#16a34a" }}>
+                        ₹{Number(form.advanceAmount || 0).toLocaleString("en-IN")}
                       </strong>
                     </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label" style={{ marginBottom: "2px" }}>Advance Amount (₹) *</label>
-                      <input
-                        type="text"
-                        className={`form-control ${errors.advanceAmount ? "is-invalid" : ""}`}
-                        style={{ height: "30px", fontSize: "12px", padding: "4px 8px" }}
-                        placeholder="0"
-                        inputMode="decimal"
-                        value={form.advanceAmount}
-                        onChange={(e) => onChange("advanceAmount", sanitizePositiveNumber(e.target.value))}
-                      />
-                      {errors.advanceAmount && <small className="error-text" style={{ fontSize: "10px" }}>{errors.advanceAmount}</small>}
-                    </div>
                     <div>
-                      <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block" }}>Remaining Amount</span>
-                      <strong style={{ fontSize: "14px", color: "#0284c7" }}>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block" }}>Balance Remaining</span>
+                      <strong style={{ fontSize: "15px", color: "#0284c7" }}>
                         ₹{Math.max(0, totalAmount - Number(form.advanceAmount || 0)).toLocaleString("en-IN")}
                       </strong>
                     </div>
                   </div>
                 </div>
 
-                {/* 3. Additional Details & Payment */}
-                <div className="compact-section-box">
-                  <div className="compact-section-title">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <rect x="2" y="4" width="20" height="16" rx="2" />
-                      <line x1="2" y1="10" x2="22" y2="10" />
-                    </svg>
-                    <span>3. Payment &amp; Logistics Details</span>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr 1fr 1.2fr", gap: "10px" }}>
-                    <div className="form-group">
-                      <label className="form-label">Bank Name *</label>
-                      <select
-                        className={`form-control ${errors.bankName ? "is-invalid" : ""}`}
-                        required
-                        value={form.bankName}
-                        onChange={(e) => onChange("bankName", e.target.value)}
-                      >
-                        <option value="">Select Bank</option>
-                        <option value="SBI">SBI</option>
-                        <option value="BOB">BOB</option>
-                        <option value="BOM">BOM</option>
-                        <option value="MGB">MGB</option>
-                        <option value="UPGB">UPGB</option>
-                        <option value="MPGB">MPGB</option>
-                        <option value="HDFC">HDFC</option>
-                        <option value="ICICI">ICICI</option>
-                        <option value="Axis">Axis</option>
-                      </select>
-                      {errors.bankName && <small className="error-text">{errors.bankName}</small>}
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label">Parcel Status</label>
-                      <select
-                        className="form-control"
-                        value={form.parcelStatus}
-                        onChange={(e) => onChange("parcelStatus", e.target.value)}
-                      >
-                        <option value="Pending">Pending</option>
-                        <option value="Process">Process</option>
-                        <option value="Parcel">Parcel</option>
-                        <option value="Packed">Packed</option>
-                        <option value="Dispatched">Dispatched</option>
-                        <option value="Delivered">Delivered</option>
-                      </select>
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label">Tracking ID</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="e.g. TRK12345"
-                        value={form.trackingId}
-                        onChange={(e) => onChange("trackingId", e.target.value)}
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label">Courier Company</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="e.g. Blue Dart / DTDC"
-                        value={form.courierCompany}
-                        onChange={(e) => onChange("courierCompany", e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "10px", marginTop: "4px" }}>
-                    <div className="form-group">
-                      <label className="form-label">Description / Dispatch Notes</label>
-                      <textarea
-                        className="form-control"
-                        rows={2}
-                        placeholder="Enter any additional instructions, client notes..."
-                        value={form.description}
-                        onChange={(e) => onChange("description", e.target.value)}
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label">Payment Screenshot (Optional, Max 2MB)</label>
-                      <div
-                        style={{
-                          border: "1.5px dashed #cbd5e1",
-                          borderRadius: "8px",
-                          padding: "8px 12px",
-                          background: "#ffffff",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: "8px",
-                        }}
-                      >
-                        <input
-                          type="file"
-                          accept=".jpg,.jpeg,.png,image/jpeg,image/png"
-                          onChange={(e) => handleScreenshot(e.target.files?.[0])}
-                          style={{ fontSize: "11px", maxWidth: "180px" }}
-                        />
-                        {previewUrl && (
-                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            <img
-                              src={previewUrl}
-                              alt="Preview"
-                              style={{ width: "28px", height: "28px", objectFit: "cover", borderRadius: "4px", border: "1px solid #e2e8f0" }}
-                            />
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              style={{ padding: "2px 6px", fontSize: "11px" }}
-                              onClick={removeScreenshot}
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      {errors.paymentScreenshot && <small className="error-text">{errors.paymentScreenshot}</small>}
-                    </div>
-                  </div>
-
                   {editingId && (
-                    <div className="form-group" style={{ marginTop: "4px", maxWidth: "240px" }}>
+                    <div className="form-group" style={{ marginTop: "12px", maxWidth: "240px" }}>
                       <label className="form-label">Order Status</label>
                       <select
                         className="form-control"
@@ -1164,9 +1122,8 @@ const EmployeeOrderPage = () => {
                     </div>
                   )}
                 </div>
-              </div>
 
-              <div className="modal-footer">
+                <div className="modal-footer">
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -1235,24 +1192,42 @@ const EmployeeOrderPage = () => {
                 </div>
                 <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
                   <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
-                    Product Type
+                    Car Model &amp; Variant
                   </span>
                   <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 600 }}>
-                    {viewOrder.productType === "Other" && viewOrder.customProductName ? viewOrder.customProductName : viewOrder.productType}
+                    {viewOrder.carModel || viewOrder.productType || "-"}
                   </div>
                 </div>
                 <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
                   <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
-                    Number of Units
+                    Car Registration No.
                   </span>
-                  <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 600 }}>{viewOrder.numberOfUnits || 0}</div>
+                  <div style={{ fontSize: "14px", color: "var(--text-heading)", fontWeight: 600, textTransform: "uppercase" }}>
+                    {viewOrder.carNumber || "-"}
+                  </div>
                 </div>
                 <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
                   <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
-                    Total Amount
+                    Body Type / Fuel
+                  </span>
+                  <div style={{ fontSize: "13.5px", color: "var(--text-heading)", fontWeight: 500 }}>
+                    {viewOrder.productType || "Car"} {viewOrder.fuelType ? `• ${viewOrder.fuelType}` : ""}
+                  </div>
+                </div>
+                <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
+                    Year / Odometer
+                  </span>
+                  <div style={{ fontSize: "13.5px", color: "var(--text-heading)", fontWeight: 500 }}>
+                    {viewOrder.manufacturingYear || "-"} {viewOrder.odometerKm ? `• ${Number(viewOrder.odometerKm).toLocaleString("en-IN")} KM` : ""}
+                  </div>
+                </div>
+                <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
+                    Car Deal Price
                   </span>
                   <div style={{ fontSize: "15px", color: "var(--text-heading)", fontWeight: 700 }}>
-                    ₹{Number(viewOrder.totalAmount || 0).toLocaleString("en-IN")}
+                    ₹{Number(viewOrder.totalAmount || viewOrder.amount || 0).toLocaleString("en-IN")}
                   </div>
                 </div>
                 <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
@@ -1261,6 +1236,14 @@ const EmployeeOrderPage = () => {
                   </span>
                   <div style={{ fontSize: "14px", color: "#16a34a", fontWeight: 600 }}>
                     ₹{Number(viewOrder.advanceAmount || 0).toLocaleString("en-IN")}
+                  </div>
+                </div>
+                <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", display: "block", marginBottom: "2px", fontWeight: 600 }}>
+                    Remaining Balance
+                  </span>
+                  <div style={{ fontSize: "14px", color: "#0284c7", fontWeight: 600 }}>
+                    ₹{Math.max(0, Number(viewOrder.totalAmount || viewOrder.amount || 0) - Number(viewOrder.advanceAmount || 0)).toLocaleString("en-IN")}
                   </div>
                 </div>
                 <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>

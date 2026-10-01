@@ -24,15 +24,18 @@ const customerSchema = new mongoose.Schema(
     verified: { type: Boolean, default: false },
     verificationStatus: {
       type: String,
-      enum: ["Verified", "Pending", "Follow-up", "Rejected"],
+      enum: ["Verified", "Pending", "Follow-up", "Rejected", "Rescheduled", "Cancelled", "No-Show"],
       default: "Pending"
     },
     odometerKm: { type: Number, default: 0 },
     leadStatus: {
       type: String,
-      enum: ["Verified", "Pending", "Follow-up", "Completed", "Cancelled"],
+      enum: ["Verified", "Pending", "Follow-up", "Completed", "Cancelled", "Rescheduled", "No-Show"],
       default: "Pending"
     },
+    rescheduledDate: { type: Date, default: null },
+    rescheduleCount: { type: Number, default: 0 },
+    cancellationReason: { type: String, trim: true, default: "" },
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null }
   },
   { timestamps: true }
@@ -58,6 +61,15 @@ customerSchema.pre("save", function () {
   } else if (this.verificationStatus === "Rejected") {
     this.verified = false;
     this.leadStatus = "Cancelled";
+  } else if (this.verificationStatus === "Cancelled") {
+    this.verified = false;
+    this.leadStatus = "Cancelled";
+  } else if (this.verificationStatus === "Rescheduled") {
+    this.verified = false;
+    this.leadStatus = "Rescheduled";
+  } else if (this.verificationStatus === "No-Show") {
+    this.verified = false;
+    this.leadStatus = "No-Show";
   }
 });
 
@@ -73,7 +85,8 @@ customerSchema.index({ carNumber: 1 });
 customerSchema.index({ appointmentId: 1 });
 customerSchema.index({ mobile: 1 });
 customerSchema.index({ customerName: 1 });
-customerSchema.index({ leadBy: 1 });
+customerSchema.index({ carNumber: 1, appointmentDate: 1 });
+customerSchema.index({ leadStatus: 1 });
 customerSchema.index({ followUpBy: 1 });
 customerSchema.index({ assignedTo: 1 });
 

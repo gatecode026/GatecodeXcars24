@@ -15,6 +15,27 @@ const performanceTargetSchema = new mongoose.Schema(
     dailyAppointmentTarget: { type: Number, required: true, default: 5, min: 1 },
     monthlySalesTarget: { type: Number, required: true, default: 1300000, min: 0 },
     bonusRate: { type: Number, required: true, default: 0.01, min: 0, max: 1 }, // stored as decimal e.g. 0.01 = 1%
+    saleValuePerLead: { type: Number, default: 65000, min: 0 },
+
+    // Calculation mode & advanced bonus rules
+    salesMetricSource: {
+      type: String,
+      enum: ["appointments", "orders", "combined"],
+      default: "appointments"
+    },
+    bonusType: {
+      type: String,
+      enum: ["percentage", "slab", "fixed"],
+      default: "percentage"
+    },
+    bonusTiers: [
+      {
+        minExcess: { type: Number, default: 0 },
+        maxExcess: { type: Number, default: null }, // null = unbounded
+        rate: { type: Number, default: 0.01 },
+        fixedAmount: { type: Number, default: 0 }
+      }
+    ],
 
     // Working days: array of JS day-of-week integers (0=Sun,1=Mon,...,6=Sat)
     workingDays: {

@@ -1,6 +1,6 @@
 "use client";
-import { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useSidebar } from "../context/SidebarContext";
 
@@ -132,7 +132,17 @@ const Sidebar = () => {
   const { user, logout } = useAuth();
   const { sidebarOpen, closeSidebar } = useSidebar();
   const navigate = useNavigate();
+  const location = useLocation();
+  const pathname = location?.pathname || "";
+
   const [reportsOpen, setReportsOpen] = useState(true);
+  const [performanceOpen, setPerformanceOpen] = useState(pathname.startsWith("/admin/performance"));
+
+  useEffect(() => {
+    if (pathname.startsWith("/admin/performance")) {
+      setPerformanceOpen(true);
+    }
+  }, [pathname]);
 
   const handleLogout = () => {
     const loginPath = localStorage.getItem("dashboard_login_path") || "/login";
@@ -165,47 +175,67 @@ const Sidebar = () => {
           </NavLink>
           <NavLink to="/admin/customers" className="sidebar-link" onClick={closeSidebar}>
             <span className="sidebar-icon"><CalendarIcon /></span>
-            Appointments
-          </NavLink>
-          <NavLink to="/admin/orders/manage" className="sidebar-link" onClick={closeSidebar}>
-            <span className="sidebar-icon"><CarIcon /></span>
-            Cars Purchased
+            Appointments &amp; Customers
           </NavLink>
           <NavLink to="/admin/sales" className="sidebar-link" onClick={closeSidebar}>
             <span className="sidebar-icon"><SalesIcon /></span>
-            Cars Sold
+            Sales Operations
+          </NavLink>
+          <NavLink to="/admin/orders/manage" className="sidebar-link" onClick={closeSidebar}>
+            <span className="sidebar-icon"><CarIcon /></span>
+            Purchases &amp; Inventory
           </NavLink>
 
-          <span className="sidebar-section-label">Team</span>
+          <span className="sidebar-section-label">Team &amp; Performance</span>
           <NavLink to="/admin/users" className="sidebar-link" onClick={closeSidebar}>
             <span className="sidebar-icon"><UsersIcon /></span>
-            Employees
-          </NavLink>
-          <NavLink to="/admin/performance" className="sidebar-link" onClick={closeSidebar}>
-            <span className="sidebar-icon"><PerformanceIcon /></span>
-            Employee Performance
+            Employees &amp; Roles
           </NavLink>
 
-          <span className="sidebar-section-label">Reports &amp; Operations</span>
+          {/* Performance Expandable Group */}
+          <div className="sidebar-dropdown">
+            <button
+              type="button"
+              className={`sidebar-dropdown-btn ${pathname.startsWith("/admin/performance") ? "active" : ""}`}
+              onClick={() => setPerformanceOpen(!performanceOpen)}
+            >
+              <span className="sidebar-icon"><PerformanceIcon /></span>
+              <span>Performance</span>
+              <ChevronDown open={performanceOpen} />
+            </button>
+            {performanceOpen && (
+              <div className="sidebar-submenu">
+                <NavLink to="/admin/performance" className="sidebar-sublink" onClick={closeSidebar}>
+                  Performance Overview
+                </NavLink>
+                <NavLink to="/admin/performance" className="sidebar-sublink" onClick={closeSidebar}>
+                  Leaderboard
+                </NavLink>
+                <NavLink to="/admin/performance" className="sidebar-sublink" onClick={closeSidebar}>
+                  Bonus Report
+                </NavLink>
+              </div>
+            )}
+          </div>
+
+          <span className="sidebar-section-label">Operations &amp; Reports</span>
           <NavLink to="/admin/calling-report" className="sidebar-link" onClick={closeSidebar}>
             <span className="sidebar-icon"><PerformanceIcon /></span>
             Telecalling Report
           </NavLink>
-
-          <span className="sidebar-section-label">Communication</span>
           <NavLink to="/admin/whatsapp" className="sidebar-link" onClick={closeSidebar}>
             <span className="sidebar-icon"><WhatsAppIcon /></span>
-            WhatsApp
+            WhatsApp Alerts
           </NavLink>
 
-          <span className="sidebar-section-label">System</span>
+          <span className="sidebar-section-label">Administration &amp; Audit</span>
+          <NavLink to="/admin/activity-logs" className="sidebar-link" onClick={closeSidebar}>
+            <span className="sidebar-icon"><LogIcon /></span>
+            Audit Logs
+          </NavLink>
           <NavLink to="/admin/profile" className="sidebar-link" onClick={closeSidebar}>
             <span className="sidebar-icon"><ProfileIcon /></span>
             Admin Profile
-          </NavLink>
-          <NavLink to="/admin/activity-logs" className="sidebar-link" onClick={closeSidebar}>
-            <span className="sidebar-icon"><LogIcon /></span>
-            Activity Logs
           </NavLink>
         </nav>
 

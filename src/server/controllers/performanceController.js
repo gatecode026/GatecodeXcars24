@@ -61,6 +61,9 @@ export const updatePerformanceSettings = async (req, res, next) => {
       bonusRate,
       workingDays,
       saleValuePerLead,
+      salesMetricSource,
+      bonusType,
+      bonusTiers,
       effectiveFrom,
       note
     } = req.body;
@@ -92,6 +95,12 @@ export const updatePerformanceSettings = async (req, res, next) => {
       bonusRate: Number(bonusRate),
       workingDays: workingDays || [1, 2, 3, 4, 5, 6],
       saleValuePerLead: Number(saleValuePerLead) || 65000,
+      salesMetricSource: salesMetricSource || "appointments",
+      bonusType: bonusType || "percentage",
+      bonusTiers: Array.isArray(bonusTiers) && bonusTiers.length > 0 ? bonusTiers : [
+        { minExcess: 0, maxExcess: 200000, rate: 0.01, fixedAmount: 0 },
+        { minExcess: 200001, maxExcess: null, rate: 0.02, fixedAmount: 0 }
+      ],
       effectiveFrom: effectiveDate,
       effectiveTo: null,
       updatedBy: req.user?._id || null,
@@ -102,7 +111,9 @@ export const updatePerformanceSettings = async (req, res, next) => {
         monthlySalesTarget: previous.monthlySalesTarget,
         bonusRate: previous.bonusRate,
         workingDays: previous.workingDays,
-        saleValuePerLead: previous.saleValuePerLead
+        saleValuePerLead: previous.saleValuePerLead,
+        salesMetricSource: previous.salesMetricSource,
+        bonusType: previous.bonusType
       } : null
     });
 
@@ -113,15 +124,16 @@ export const updatePerformanceSettings = async (req, res, next) => {
       performedByRole: req.user?.role || "admin",
       actionType: "LEAD_UPDATED",
       title: "Performance Settings Updated",
-      details: `Performance settings updated. Daily target: ${dailyAppointmentTarget} appts, Monthly sales: ₹${Number(monthlySalesTarget).toLocaleString("en-IN")}, Bonus: ${(bonusRate * 100).toFixed(2)}%. Effective from: ${effectiveDate.toDateString()}`,
+      details: `Performance settings updated. Daily target: ${dailyAppointmentTarget} appts, Monthly sales: ₹${Number(monthlySalesTarget).toLocaleString("en-IN")}, Bonus: ${(bonusRate * 100).toFixed(2)}%, Source: ${salesMetricSource || "appointments"}, Type: ${bonusType || "percentage"}. Effective from: ${effectiveDate.toDateString()}`,
       adminMessage: `Admin updated performance targets effective ${effectiveDate.toDateString()}`,
       metadata: {
         old: previous?._id ? {
           dailyAppointmentTarget: previous.dailyAppointmentTarget,
           monthlySalesTarget: previous.monthlySalesTarget,
-          bonusRate: previous.bonusRate
+          bonusRate: previous.bonusRate,
+          salesMetricSource: previous.salesMetricSource
         } : null,
-        new: { dailyAppointmentTarget, monthlySalesTarget, bonusRate },
+        new: { dailyAppointmentTarget, monthlySalesTarget, bonusRate, salesMetricSource, bonusType },
         effectiveFrom: effectiveDate
       }
     });
@@ -140,14 +152,20 @@ export const updatePerformanceSettings = async (req, res, next) => {
 // ─── Admin: Monthly Performance + Rankings ────────────────────────────────────
 
 /**
- * GET /api/admin/performance-ranking?month=8&year=2026
+ * GET /api/admin/performance-ranking?month=8&year=2026&departmentId=...&branchId=...
  */
 export const getAdminPerformanceRanking = async (req, res, next) => {
   try {
     const dbReady = await ensureDB();
     if (!dbReady) return res.status(503).json({ message: "Database unavailable." });
     const { month, year } = getPeriodParams(req.query);
-    const summary = await getAdminMonthlySummary(month, year);
+    const filterOptions = {
+      departmentId: req.query.departmentId || null,
+      branchId: req.query.branchId || null,
+      designation: req.query.designation || null,
+      employeeId: req.query.employeeId || null
+    };
+    const summary = await getAdminMonthlySummary(month, year, filterOptions);
     return res.status(200).json({ data: summary });
   } catch (err) {
     return next(err);
@@ -168,7 +186,7 @@ export const getAdminEmployeePerformanceDetail = async (req, res, next) => {
     if (!employee) return res.status(404).json({ message: "Employee not found." });
 
     const [monthly, dailyHistory, todayPerf] = await Promise.all([
-      getEmployeeMonthlyPerformance(id, month, year, employee.createdAt),
+      getEmployeeMonthlyPerformance(id, month, year, employee?.joiningDate || null),
       getEmployeeDailyHistory(id, month, year),
       getDailyAppointmentPerformance(id, new Date())
     ]);
@@ -201,7 +219,13 @@ export const getAdminBonusReport = async (req, res, next) => {
     const dbReady = await ensureDB();
     if (!dbReady) return res.status(503).json({ message: "Database unavailable." });
     const { month, year } = getPeriodParams(req.query);
-    const rankings = await calculateEmployeeRankings(month, year);
+    const filterOptions = {
+      departmentId: req.query.departmentId || null,
+      branchId: req.query.branchId || null,
+      designation: req.query.designation || null,
+      employeeId: req.query.employeeId || null
+    };
+    const rankings = await calculateEmployeeRankings(month, year, filterOptions);
 
     const report = rankings.map((r) => ({
       employee: r.employee,
@@ -210,18 +234,20 @@ export const getAdminBonusReport = async (req, res, next) => {
       year,
       verifiedLeadCount: r.sales.verifiedLeadCount,
       saleValuePerLead: r.sales.saleValuePerLead,
+      orderSales: r.sales.orderSales || 0,
       monthlySales: r.sales.monthlySales,
       salesTarget: r.sales.target,
       salesAchievementPercent: r.sales.achievementPercent,
       excessSales: r.sales.excessSales,
       bonusRate: r.sales.bonusRate,
       bonus: r.sales.bonus,
+      bonusEligibility: r.sales.bonusEligibility,
       salesStatus: r.sales.status,
       appointments: r.appointments,
       performance: r.performance
     }));
 
-    return res.status(200).json({ data: { report, month, year } });
+    return res.status(200).json({ data: { report, month, year, filterOptions } });
   } catch (err) {
     return next(err);
   }
@@ -236,7 +262,13 @@ export const exportBonusReportCSV = async (req, res, next) => {
     const dbReady = await ensureDB();
     if (!dbReady) return res.status(503).json({ message: "Database unavailable." });
     const { month, year } = getPeriodParams(req.query);
-    const rankings = await calculateEmployeeRankings(month, year);
+    const filterOptions = {
+      departmentId: req.query.departmentId || null,
+      branchId: req.query.branchId || null,
+      designation: req.query.designation || null,
+      employeeId: req.query.employeeId || null
+    };
+    const rankings = await calculateEmployeeRankings(month, year, filterOptions);
 
     const monthLabel = new Date(year, month, 1).toLocaleString("default", { month: "long", year: "numeric" });
 
@@ -305,7 +337,7 @@ export const getMyPerformance = async (req, res, next) => {
     const employee = await User.findById(empId).select("-password").lean();
 
     const [monthly, todayPerf, allRankings] = await Promise.all([
-      getEmployeeMonthlyPerformance(empId, month, year, employee?.createdAt),
+      getEmployeeMonthlyPerformance(empId, month, year, employee?.joiningDate || null),
       getDailyAppointmentPerformance(empId, new Date()),
       calculateEmployeeRankings(month, year)
     ]);

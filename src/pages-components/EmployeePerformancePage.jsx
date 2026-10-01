@@ -161,9 +161,11 @@ export default function EmployeePerformancePage() {
   const [data, setData] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const [perfRes, histRes] = await Promise.all([
         api.get(`/employee/performance?month=${month}&year=${year}`),
@@ -173,6 +175,7 @@ export default function EmployeePerformancePage() {
       setHistory(histRes.data?.data || []);
     } catch (err) {
       console.error("Failed to load employee performance:", err);
+      setError(err.response?.data?.message || "Failed to load employee performance from server.");
     } finally {
       setLoading(false);
     }
@@ -324,6 +327,37 @@ export default function EmployeePerformancePage() {
           </span>
         </div>
       </div>
+
+      {/* ── Error Banner & Retry State ── */}
+      {error && (
+        <div
+          style={{
+            background: "rgba(239, 68, 68, 0.08)",
+            border: "1px solid rgba(239, 68, 68, 0.3)",
+            borderRadius: "10px",
+            padding: "14px 18px",
+            marginBottom: "20px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "12px"
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#dc2626", fontSize: "13px" }}>
+            <span style={{ fontWeight: 700 }}>Unable to load performance metrics:</span>
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-sm btn-primary"
+            onClick={fetchData}
+            style={{ padding: "6px 14px", fontSize: "12px" }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="table-card" style={{ padding: "60px 24px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>
@@ -557,6 +591,61 @@ export default function EmployeePerformancePage() {
                       : `Achieve ${INR(Math.max(0, (sales?.target || 1300000) - (sales?.monthlySales || 0)))} more in sales to start earning bonuses`}
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Appointment Pipeline & Status Breakdown ── */}
+          <div className="card" style={{ padding: "20px", marginBottom: "20px" }}>
+            <div className="card-header" style={{ borderBottom: "1px solid var(--border)", paddingBottom: "12px", marginBottom: "16px" }}>
+              <div className="card-title-box">
+                <h3 style={{ fontSize: "16px", fontWeight: 700, margin: 0, color: "var(--text-heading)" }}>
+                  Monthly Appointment Pipeline Breakdown
+                </h3>
+                <p style={{ margin: "3px 0 0", fontSize: "12px", color: "var(--text-muted)" }}>
+                  Comprehensive status distribution for {MONTHS[month]} {year}
+                </p>
+              </div>
+              <span className="badge badge-info" style={{ fontSize: "11.5px" }}>
+                Total Tracked: {appt?.totalTracked ?? 0}
+              </span>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "12px" }}>
+              <div style={{ background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.25)", borderRadius: "8px", padding: "12px", textAlign: "center" }}>
+                <div style={{ fontSize: "11px", fontWeight: 600, color: "#16a34a", textTransform: "uppercase" }}>Completed</div>
+                <div style={{ fontSize: "20px", fontWeight: 800, color: "#16a34a", marginTop: "4px" }}>{appt?.completed ?? 0}</div>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>Verified visits</div>
+              </div>
+
+              <div style={{ background: "rgba(2, 132, 199, 0.08)", border: "1px solid rgba(2, 132, 199, 0.25)", borderRadius: "8px", padding: "12px", textAlign: "center" }}>
+                <div style={{ fontSize: "11px", fontWeight: 600, color: "#0284c7", textTransform: "uppercase" }}>Pending</div>
+                <div style={{ fontSize: "20px", fontWeight: 800, color: "#0284c7", marginTop: "4px" }}>{appt?.pending ?? 0}</div>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>Awaiting verification</div>
+              </div>
+
+              <div style={{ background: "rgba(99, 102, 241, 0.08)", border: "1px solid rgba(99, 102, 241, 0.25)", borderRadius: "8px", padding: "12px", textAlign: "center" }}>
+                <div style={{ fontSize: "11px", fontWeight: 600, color: "#6366f1", textTransform: "uppercase" }}>Follow-up</div>
+                <div style={{ fontSize: "20px", fontWeight: 800, color: "#6366f1", marginTop: "4px" }}>{appt?.followUp ?? 0}</div>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>Active discussions</div>
+              </div>
+
+              <div style={{ background: "rgba(217, 119, 6, 0.08)", border: "1px solid rgba(217, 119, 6, 0.25)", borderRadius: "8px", padding: "12px", textAlign: "center" }}>
+                <div style={{ fontSize: "11px", fontWeight: 600, color: "#d97706", textTransform: "uppercase" }}>Rescheduled</div>
+                <div style={{ fontSize: "20px", fontWeight: 800, color: "#d97706", marginTop: "4px" }}>{appt?.rescheduled ?? 0}</div>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>Shifted slots</div>
+              </div>
+
+              <div style={{ background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.25)", borderRadius: "8px", padding: "12px", textAlign: "center" }}>
+                <div style={{ fontSize: "11px", fontWeight: 600, color: "#ef4444", textTransform: "uppercase" }}>Cancelled</div>
+                <div style={{ fontSize: "20px", fontWeight: 800, color: "#ef4444", marginTop: "4px" }}>{appt?.cancelled ?? 0}</div>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>Rejected / cancelled</div>
+              </div>
+
+              <div style={{ background: "rgba(100, 116, 139, 0.08)", border: "1px solid rgba(100, 116, 139, 0.25)", borderRadius: "8px", padding: "12px", textAlign: "center" }}>
+                <div style={{ fontSize: "11px", fontWeight: 600, color: "#64748b", textTransform: "uppercase" }}>No-Show</div>
+                <div style={{ fontSize: "20px", fontWeight: 800, color: "#64748b", marginTop: "4px" }}>{appt?.noShow ?? 0}</div>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>Missed slot</div>
               </div>
             </div>
           </div>

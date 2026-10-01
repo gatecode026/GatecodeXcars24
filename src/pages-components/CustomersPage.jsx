@@ -677,6 +677,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                 { key: "yesterday", label: "Yesterday" },
                 { key: "week", label: "This Week" },
                 { key: "month", label: "This Month" },
+                { key: "last_month", label: "Last Month" },
                 { key: "custom", label: "Custom" }
               ].map(({ key, label }) => (
                 <button

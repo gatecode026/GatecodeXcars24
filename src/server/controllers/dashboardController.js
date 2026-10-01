@@ -57,18 +57,29 @@ export const getDashboardSummary = async (req, res, next) => {
     // Filter scope for employee vs admin
     const customerFilter = {};
     if (userRole === "employee") {
-      customerFilter.$or = [{ employeeId: req.user._id }, { assignedTo: req.user._id }];
+      customerFilter.$or = [
+        { employeeId: req.user._id },
+        { assignedTo: req.user._id },
+        ...(req.user?.name ? [{ leadBy: new RegExp(`^${req.user.name.trim()}$`, "i") }] : [])
+      ];
     }
 
     // Consolidated single roundtrip for all customer KPIs, 7-day trend, and top employees
-    const [customerFacetResult, orderStatsResult, activeEmployees, totalReturns, recentLeadsRaw] = await Promise.all([
+    const [customerFacetResult, orderStatsResult, activeEmployees, totalReturns, recentLeadsRaw, callingAggregate] = await Promise.all([
       Customer.aggregate([
         { $match: customerFilter },
         {
           $facet: {
             total: [{ $count: "count" }],
             today: [
-              { $match: { createdAt: { $gte: startOfToday, $lte: endOfToday } } },
+              {
+                $match: {
+                  $or: [
+                    { createdAt: { $gte: startOfToday, $lte: endOfToday } },
+                    { leadDate: { $gte: startOfToday, $lte: endOfToday } }
+                  ]
+                }
+              },
               { $count: "count" }
             ],
             followUps: [

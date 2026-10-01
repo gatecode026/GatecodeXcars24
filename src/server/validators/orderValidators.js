@@ -1,6 +1,20 @@
 import { body } from "express-validator";
 
-const productTypes = ["GPS", "Vending Machine", "Disposal", "Other"];
+const productTypes = [
+  "Hatchback",
+  "Sedan",
+  "SUV",
+  "Compact SUV",
+  "MUV",
+  "Luxury",
+  "Commercial",
+  "Used Car",
+  "Car",
+  "GPS",
+  "Vending Machine",
+  "Disposal",
+  "Other"
+];
 const orderStatuses = ["Pending", "Approved", "Processing", "Delivered", "Cancelled"];
 const parcelStatuses = ["Pending", "Process", "Parcel", "Packed", "Dispatched", "Delivered"];
 const bankNames = ["SBI", "BOB", "BOM", "MGB", "UPGB", "MPGB"];
@@ -11,17 +25,12 @@ export const createOrderValidator = [
   body("alternateMobileNumber").optional({ values: "falsy" }).matches(/^[6-9]\d{9}$/).withMessage("Enter a valid 10-digit alternate mobile number"),
   body("fullAddress").trim().notEmpty().withMessage("Full address is required"),
   body("pincode").matches(/^\d{6}$/).withMessage("Pincode must be 6 digits"),
-  body("productType").isIn(productTypes).withMessage("Invalid product type"),
-  body("customProductName")
-    .optional()
-    .isString()
-    .custom((value, { req }) => {
-      if (req.body.productType === "Other" && !value?.trim()) {
-        throw new Error("Custom product name is required for Other product type");
-      }
-      return true;
-    }),
-  body("numberOfUnits").isInt({ min: 1 }).withMessage("Number of units must be at least 1"),
+  body("carModel").optional().trim().isString(),
+  body("carNumber").optional().trim().isString(),
+  body("fuelType").optional().trim().isString(),
+  body("productType").optional().isString(),
+  body("customProductName").optional().isString(),
+  body("numberOfUnits").optional().isInt({ min: 1 }).withMessage("Number of units must be at least 1"),
   body("amount").isFloat({ min: 0 }).withMessage("Amount must be a positive number"),
   body("advanceAmount")
     .isFloat({ min: 0 })
@@ -36,7 +45,7 @@ export const createOrderValidator = [
       return true;
     }),
   body("dateOfOrder").optional(),
-  body("bankName").notEmpty().withMessage("Bank name is required").isIn(bankNames).withMessage("Invalid bank name")
+  body("bankName").optional({ values: "falsy" }).isString()
 ];
 
 export const updateOrderStatusValidator = [

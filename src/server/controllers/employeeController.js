@@ -48,6 +48,18 @@ const getDateRange = (filter, startDate, endDate) => {
       end.setHours(23, 59, 59, 999);
       break;
     }
+    case "last_month": {
+      start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      start.setHours(0, 0, 0, 0);
+      end = new Date(now.getFullYear(), now.getMonth(), 0);
+      end.setHours(23, 59, 59, 999);
+      break;
+    }
+    case "all": {
+      start = new Date(0);
+      end = new Date(8640000000000000);
+      break;
+    }
     case "custom": {
       start = startDate ? new Date(startDate) : new Date(0);
       start.setHours(0, 0, 0, 0);
@@ -93,12 +105,29 @@ export const getEmployeeDashboard = async (req, res, next) => {
 
     const dateFilter = { employeeId, createdAt: { $gte: start, $lte: end } };
 
+    const leadEmpFilter = {
+      $or: [
+        { employeeId },
+        { assignedTo: employeeId },
+        ...(req.user?.name ? [{ leadBy: new RegExp(`^${req.user.name.trim()}$`, "i") }] : [])
+      ]
+    };
+
+    const leadDateCondition = filter === "all" ? null : {
+      $or: [
+        { createdAt: { $gte: start, $lte: end } },
+        { leadDate: { $gte: start, $lte: end } }
+      ]
+    };
+
+    const customerQuery = leadDateCondition
+      ? { $and: [leadEmpFilter, leadDateCondition] }
+      : leadEmpFilter;
+
     const [orderCount, returnCount, leadCount, recentOrders, recentReturns, allOrders, callingRecords] = await Promise.all([
       Order.countDocuments(dateFilter),
       ReturnRequest.countDocuments(dateFilter),
-      Customer.countDocuments({
-        $or: [{ employeeId }, { assignedTo: employeeId }, { leadBy: req.user?.name }]
-      }),
+      Customer.countDocuments(customerQuery),
       Order.find(dateFilter).sort({ createdAt: -1 }).limit(5).lean(),
       ReturnRequest.find(dateFilter).sort({ createdAt: -1 }).limit(5).lean(),
       Order.find(dateFilter).select("numberOfUnits amount").lean(),
@@ -192,7 +221,8 @@ export const updateEmployeeOrder = async (req, res, next) => {
     }
 
     const allowedFields = [
-      "customerName", "mobileNumber", "fullAddress", "pincode",
+      "customerName", "mobileNumber", "alternateMobileNumber", "fullAddress", "pincode",
+      "carModel", "carNumber", "fuelType", "manufacturingYear", "odometerKm",
       "productType", "customProductName", "numberOfUnits", "amount",
       "totalAmount", "advanceAmount", "dateOfOrder", "orderStatus"
     ];

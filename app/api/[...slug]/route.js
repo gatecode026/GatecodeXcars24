@@ -116,6 +116,12 @@ import {
   setTLWhatsAppNumbers
 } from "@/src/server/services/whatsappNotificationService";
 
+import {
+  getDepartments,
+  getBranches,
+  getLookups
+} from "@/src/server/controllers/masterDataController";
+
 async function dispatch(request, context) {
   const method = request.method.toUpperCase();
   const rawParams = await (context?.params || {});
@@ -332,7 +338,18 @@ async function dispatch(request, context) {
     }
   }
 
-  // 11. /api/health
+  // 11. Master Data & Lookups
+  if (path === "/departments" && method === "GET") {
+    return runHandler(request, {}, [protect], getDepartments);
+  }
+  if (path === "/branches" && method === "GET") {
+    return runHandler(request, {}, [protect], getBranches);
+  }
+  if (path === "/lookups" && method === "GET") {
+    return runHandler(request, {}, [protect], getLookups);
+  }
+
+  // 12. /api/health
   if (path === "/health" && method === "GET") {
     return Response.json(
       { message: "API running" },

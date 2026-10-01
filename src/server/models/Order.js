@@ -9,13 +9,18 @@ const orderSchema = new mongoose.Schema(
     alternateMobileNumber: { type: String, default: "", trim: true },
     fullAddress: { type: String, required: true, trim: true },
     pincode: { type: String, required: true, trim: true },
+    carNumber: { type: String, default: "", trim: true },
+    carModel: { type: String, default: "", trim: true },
+    fuelType: { type: String, default: "Petrol", trim: true },
+    manufacturingYear: { type: String, default: "", trim: true },
+    odometerKm: { type: Number, default: 0 },
     productType: {
       type: String,
-      enum: ["GPS", "Vending Machine", "Disposal", "Other"],
-      required: true
+      default: "Car",
+      trim: true
     },
     customProductName: { type: String, default: "" },
-    numberOfUnits: { type: Number, required: true, min: 1 },
+    numberOfUnits: { type: Number, default: 1, min: 1 },
     amount: { type: Number, required: true, min: 0 },
     totalAmount: { type: Number, required: true, min: 0 },
     advanceAmount: { type: Number, required: true, min: 0 },
@@ -35,7 +40,6 @@ const orderSchema = new mongoose.Schema(
     courierCompany: { type: String, default: "" },
     bankName: {
       type: String,
-      enum: ["SBI", "BOB", "BOM", "MGB", "UPGB", "MPGB"],
       default: ""
     }
   },

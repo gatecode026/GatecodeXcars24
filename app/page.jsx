@@ -10,12 +10,21 @@ import EmployeeLayout from "@/src/components/EmployeeLayout";
 import { SidebarProvider } from "@/src/context/SidebarContext";
 
 export default function RootPage() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // During SSR and initial client hydration (before mount), render identical placeholder to prevent mismatch
+  if (!mounted || loading) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "#f8fafc" }}>
+        <div className="spinner-border" style={{ width: "36px", height: "36px", color: "#0284c7" }} />
+      </div>
+    );
+  }
 
   // If authenticated user is present, render their role dashboard directly
   if (user && !user.guest) {

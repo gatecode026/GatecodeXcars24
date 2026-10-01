@@ -47,6 +47,7 @@ import mongoose from "mongoose";
 import { PerformanceTarget } from "../models/PerformanceTarget.js";
 import { Customer } from "../models/Customer.js";
 import { User } from "../models/User.js";
+import { Order } from "../models/Order.js";
 
 // In-memory target cache (60s TTL)
 const targetCache = new Map();
@@ -82,6 +83,12 @@ export async function getTargetForDate(date) {
     bonusRate: 0.01,
     workingDays: [1, 2, 3, 4, 5, 6], // Mon–Sat
     saleValuePerLead: 65000,
+    salesMetricSource: "appointments",
+    bonusType: "percentage",
+    bonusTiers: [
+      { minExcess: 0, maxExcess: 200000, rate: 0.01, fixedAmount: 0 },
+      { minExcess: 200001, maxExcess: null, rate: 0.02, fixedAmount: 0 }
+    ],
     effectiveFrom: new Date(0),
     effectiveTo: null
   };
@@ -108,7 +115,13 @@ export async function getCurrentTarget() {
     monthlySalesTarget: 1300000,
     bonusRate: 0.01,
     workingDays: [1, 2, 3, 4, 5, 6],
-    saleValuePerLead: 65000
+    saleValuePerLead: 65000,
+    salesMetricSource: "appointments",
+    bonusType: "percentage",
+    bonusTiers: [
+      { minExcess: 0, maxExcess: 200000, rate: 0.01, fixedAmount: 0 },
+      { minExcess: 200001, maxExcess: null, rate: 0.02, fixedAmount: 0 }
+    ]
   };
 
   targetCache.set("current", { time: Date.now(), data });
@@ -116,11 +129,72 @@ export async function getCurrentTarget() {
 }
 
 /**
+ * Helper to build an employee filter matching employeeId, assignedTo, or leadBy name.
+ */
+export async function buildEmployeeScopeFilter(employeeId) {
+  const empId =
+    typeof employeeId === "string"
+      ? new mongoose.Types.ObjectId(employeeId)
+      : employeeId;
+  const conditions = [{ employeeId: empId }, { assignedTo: empId }];
+  try {
+    const emp = await User.findById(empId).select("name").lean();
+    if (emp?.name && emp.name.trim()) {
+      conditions.push({ leadBy: new RegExp(`^${emp.name.trim()}$`, "i") });
+    }
+  } catch (_) {}
+  return { $or: conditions };
+}
+
+/**
+ * Helper to build a comprehensive date filter for appointments/leads.
+ * Checks appointmentDate first, then falls back to leadDate, then createdAt.
+ */
+export function buildPeriodDateFilter(startDate, endDate) {
+  return {
+    $or: [
+      { appointmentDate: { $gte: startDate, $lte: endDate } },
+      {
+        $and: [
+          {
+            $or: [
+              { appointmentDate: null },
+              { appointmentDate: { $lt: startDate } },
+              { appointmentDate: { $gt: endDate } }
+            ]
+          },
+          { leadDate: { $gte: startDate, $lte: endDate } }
+        ]
+      },
+      {
+        $and: [
+          {
+            $or: [
+              { appointmentDate: null },
+              { appointmentDate: { $lt: startDate } },
+              { appointmentDate: { $gt: endDate } }
+            ]
+          },
+          {
+            $or: [
+              { leadDate: null },
+              { leadDate: { $lt: startDate } },
+              { leadDate: { $gt: endDate } }
+            ]
+          },
+          { createdAt: { $gte: startDate, $lte: endDate } }
+        ]
+      }
+    ]
+  };
+}
+
+/**
  * Count working days between two dates (inclusive) given a working-day set.
  * @param {Date} start
  * @param {Date} end  - capped at today if in the future
  * @param {number[]} workingDays - array of JS day-of-week ints (0=Sun)
- * @param {Date|null} joinDate - if employee joined after start, use joinDate as start
+ * @param {Date|null} joinDate - if employee joined within this period, use joinDate as start
  */
 export function countWorkingDays(start, end, workingDays, joinDate = null) {
   const today = new Date();
@@ -132,7 +206,8 @@ export function countWorkingDays(start, end, workingDays, joinDate = null) {
   if (joinDate) {
     const jd = new Date(joinDate);
     jd.setHours(0, 0, 0, 0);
-    if (jd > from) from = jd;
+    // Only clamp if joinDate is strictly within this month's range [from, end]
+    if (jd > from && jd <= end) from = jd;
   }
 
   let to = new Date(end);
@@ -183,14 +258,48 @@ export function calculateSalesAchievement(sales, target) {
 
 /**
  * Calculate bonus (server-side only).
- * Formula: max(0, sales - target) × rate
- * Uses integer arithmetic to avoid floating-point errors.
+ * Formula: strictly on excess sales above target: max(0, sales - target)
+ * Supports flat percentage (default 1%) or configurable tiered slabs.
+ * Never calculates bonus from total sales.
  */
-export function calculateBonus(sales, target, rate) {
+export function calculateBonus(sales, target, rateOrConfig) {
+  let rate = 0.01;
+  let bonusType = "percentage";
+  let bonusTiers = [];
+
+  if (typeof rateOrConfig === "object" && rateOrConfig !== null) {
+    rate = rateOrConfig.bonusRate ?? 0.01;
+    bonusType = rateOrConfig.bonusType ?? "percentage";
+    bonusTiers = rateOrConfig.bonusTiers ?? [];
+  } else if (typeof rateOrConfig === "number") {
+    rate = rateOrConfig;
+  }
+
   const excess = Math.max(0, sales - target);
-  // Multiply then divide to maintain precision (rate is decimal like 0.01)
-  const bonus = Math.round(excess * rate * 100) / 100;
-  return { excess, bonus };
+  if (excess <= 0) {
+    return { excess: 0, bonus: 0 };
+  }
+
+  let bonus = 0;
+  if (bonusType === "slab" && Array.isArray(bonusTiers) && bonusTiers.length > 0) {
+    for (const tier of bonusTiers) {
+      if (excess >= tier.minExcess) {
+        const taxableInTier = tier.maxExcess != null
+          ? Math.min(excess, tier.maxExcess) - tier.minExcess
+          : excess - tier.minExcess;
+        if (taxableInTier > 0) {
+          bonus += (taxableInTier * (tier.rate || 0)) + (tier.fixedAmount || 0);
+        }
+      }
+    }
+  } else {
+    bonus = excess * rate;
+  }
+
+  return {
+    excess: Math.round(excess * 100) / 100,
+    bonus: Math.round(bonus * 100) / 100
+  };
 }
 
 /**
@@ -261,24 +370,39 @@ export async function getDailyAppointmentPerformance(employeeId, date) {
     };
   }
 
-  const empId =
-    typeof employeeId === "string"
-      ? new mongoose.Types.ObjectId(employeeId)
-      : employeeId;
+  const empFilter = await buildEmployeeScopeFilter(employeeId);
+  const dateFilter = buildPeriodDateFilter(dayStart, dayEnd);
 
-  const completed = await Customer.countDocuments({
-    employeeId: empId,
-    verificationStatus: "Verified",
-    $or: [
-      { appointmentDate: { $gte: dayStart, $lte: dayEnd } },
-      {
-        $and: [
-          { appointmentDate: null },
-          { createdAt: { $gte: dayStart, $lte: dayEnd } }
-        ]
-      }
+  const records = await Customer.find({
+    $and: [
+      empFilter,
+      dateFilter
     ]
-  });
+  }).select("verificationStatus leadStatus rescheduleCount").lean();
+
+  let completed = 0;
+  let pending = 0;
+  let followUp = 0;
+  let rescheduled = 0;
+  let cancelled = 0;
+  let noShow = 0;
+
+  for (const r of records) {
+    const vs = r.verificationStatus;
+    if (vs === "Verified") {
+      completed++;
+    } else if (vs === "Pending") {
+      pending++;
+    } else if (vs === "Follow-up") {
+      followUp++;
+    } else if (vs === "Rescheduled" || (r.rescheduleCount && r.rescheduleCount > 0)) {
+      rescheduled++;
+    } else if (vs === "Rejected" || vs === "Cancelled") {
+      cancelled++;
+    } else if (vs === "No-Show") {
+      noShow++;
+    }
+  }
 
   const today = new Date();
   const isToday =
@@ -295,6 +419,12 @@ export async function getDailyAppointmentPerformance(employeeId, date) {
     date: d,
     target,
     completed,
+    pending,
+    followUp,
+    rescheduled,
+    cancelled,
+    noShow,
+    totalTracked: records.length,
     remaining,
     achievementPercent,
     status,
@@ -315,24 +445,39 @@ export async function getMonthlyAppointmentPerformance(employeeId, month, year, 
   const workingDays = countWorkingDays(startOfMonth, endOfMonth, config.workingDays, joinDate);
   const expectedAppointments = workingDays * config.dailyAppointmentTarget;
 
-  const empId =
-    typeof employeeId === "string"
-      ? new mongoose.Types.ObjectId(employeeId)
-      : employeeId;
+  const empFilter = await buildEmployeeScopeFilter(employeeId);
+  const dateFilter = buildPeriodDateFilter(startOfMonth, endOfMonth);
 
-  const completed = await Customer.countDocuments({
-    employeeId: empId,
-    verificationStatus: "Verified",
-    $or: [
-      { appointmentDate: { $gte: startOfMonth, $lte: endOfMonth } },
-      {
-        $and: [
-          { appointmentDate: null },
-          { createdAt: { $gte: startOfMonth, $lte: endOfMonth } }
-        ]
-      }
+  const records = await Customer.find({
+    $and: [
+      empFilter,
+      dateFilter
     ]
-  });
+  }).select("verificationStatus leadStatus rescheduleCount").lean();
+
+  let completed = 0;
+  let pending = 0;
+  let followUp = 0;
+  let rescheduled = 0;
+  let cancelled = 0;
+  let noShow = 0;
+
+  for (const r of records) {
+    const vs = r.verificationStatus;
+    if (vs === "Verified") {
+      completed++;
+    } else if (vs === "Pending") {
+      pending++;
+    } else if (vs === "Follow-up") {
+      followUp++;
+    } else if (vs === "Rescheduled" || (r.rescheduleCount && r.rescheduleCount > 0)) {
+      rescheduled++;
+    } else if (vs === "Rejected" || vs === "Cancelled") {
+      cancelled++;
+    } else if (vs === "No-Show") {
+      noShow++;
+    }
+  }
 
   const achievementPercent = calculateAppointmentAchievement(completed, expectedAppointments);
 
@@ -343,6 +488,12 @@ export async function getMonthlyAppointmentPerformance(employeeId, month, year, 
     dailyTarget: config.dailyAppointmentTarget,
     expectedAppointments,
     completed,
+    pending,
+    followUp,
+    rescheduled,
+    cancelled,
+    noShow,
+    totalTracked: records.length,
     remaining: Math.max(0, expectedAppointments - completed),
     achievementPercent
   };
@@ -352,8 +503,10 @@ export async function getMonthlyAppointmentPerformance(employeeId, month, year, 
 
 /**
  * Calculate monthly sales for one employee.
- * Sales = number of Verified customer records × saleValuePerLead.
- * The saleValuePerLead is stored in the PerformanceTarget configuration.
+ * Supports configurable sales metric sources:
+ * - "appointments": Verified customer records × saleValuePerLead
+ * - "orders": Direct vehicle order volume from Order.totalAmount
+ * - "combined": Sum of both appointment lead value and direct order volume
  */
 export async function getMonthlySalesPerformance(employeeId, month, year) {
   const startOfMonth = new Date(year, month, 1, 0, 0, 0, 0);
@@ -363,41 +516,65 @@ export async function getMonthlySalesPerformance(employeeId, month, year) {
   const saleValuePerLead = config.saleValuePerLead || 65000;
   const monthlySalesTarget = config.monthlySalesTarget;
   const bonusRate = config.bonusRate;
+  const salesMetricSource = config.salesMetricSource || "appointments";
 
-  const empId =
-    typeof employeeId === "string"
-      ? new mongoose.Types.ObjectId(employeeId)
-      : employeeId;
+  const empFilter = await buildEmployeeScopeFilter(employeeId);
+  const dateFilter = buildPeriodDateFilter(startOfMonth, endOfMonth);
 
-  const verifiedCount = await Customer.countDocuments({
-    employeeId: empId,
-    verificationStatus: "Verified",
-    $or: [
-      { appointmentDate: { $gte: startOfMonth, $lte: endOfMonth } },
-      {
-        $and: [
-          { appointmentDate: null },
-          { createdAt: { $gte: startOfMonth, $lte: endOfMonth } }
-        ]
-      }
-    ]
-  });
+  let verifiedCount = 0;
+  let orderSales = 0;
 
-  const monthlySales = Math.round(verifiedCount * saleValuePerLead * 100) / 100;
+  if (salesMetricSource === "appointments" || salesMetricSource === "combined") {
+    verifiedCount = await Customer.countDocuments({
+      $and: [
+        empFilter,
+        dateFilter,
+        { verificationStatus: "Verified" }
+      ]
+    });
+  }
+
+  if (salesMetricSource === "orders" || salesMetricSource === "combined") {
+    const orders = await Order.find({
+      employeeId,
+      createdAt: { $gte: startOfMonth, $lte: endOfMonth },
+      orderStatus: { $nin: ["Cancelled"] }
+    }).select("totalAmount amount").lean();
+    orderSales = orders.reduce((sum, o) => sum + Number(o.totalAmount || o.amount || 0), 0);
+  }
+
+  let monthlySales = 0;
+  if (salesMetricSource === "appointments") {
+    monthlySales = Math.round(verifiedCount * saleValuePerLead * 100) / 100;
+  } else if (salesMetricSource === "orders") {
+    monthlySales = Math.round(orderSales * 100) / 100;
+  } else {
+    monthlySales = Math.round((verifiedCount * saleValuePerLead + orderSales) * 100) / 100;
+  }
+
   const salesAchievementPercent = calculateSalesAchievement(monthlySales, monthlySalesTarget);
-  const { excess, bonus } = calculateBonus(monthlySales, monthlySalesTarget, bonusRate);
+  const { excess, bonus } = calculateBonus(monthlySales, monthlySalesTarget, config);
+  const remainingTarget = Math.max(0, monthlySalesTarget - monthlySales);
+  const bonusEligibility = monthlySales > monthlySalesTarget;
 
   return {
     month,
     year,
+    salesMetricSource,
     verifiedLeadCount: verifiedCount,
     saleValuePerLead,
+    orderSales,
     monthlySales,
+    achievedSales: monthlySales,
     target: monthlySalesTarget,
+    monthlyTarget: monthlySalesTarget,
+    remainingTarget,
+    remaining: remainingTarget,
     achievementPercent: salesAchievementPercent,
     excessSales: excess,
     bonusRate,
     bonus,
+    bonusEligibility,
     status: getMonthlySalesStatus(monthlySales, monthlySalesTarget)
   };
 }
@@ -431,53 +608,44 @@ export async function getEmployeeMonthlyPerformance(employeeId, month, year, joi
  * Build a day-by-day performance history for an employee in a given month.
  */
 export async function getEmployeeDailyHistory(employeeId, month, year) {
-  const startOfMonth = new Date(year, month, 1);
+  const startOfMonth = new Date(year, month, 1, 0, 0, 0, 0);
   const today = new Date();
-  const endOfMonth = new Date(year, month + 1, 0);
+  const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
   const end = endOfMonth < today ? endOfMonth : today;
 
   const config = await getTargetForDate(new Date(year, month, 15));
   const workingDaySet = new Set(config.workingDays);
   const target = config.dailyAppointmentTarget;
 
-  const empId =
-    typeof employeeId === "string"
-      ? new mongoose.Types.ObjectId(employeeId)
-      : employeeId;
+  const empFilter = await buildEmployeeScopeFilter(employeeId);
+  const dateFilter = buildPeriodDateFilter(startOfMonth, endOfMonth);
 
   // Fetch all verified appointments for the month in one query
   const records = await Customer.find({
-    employeeId: empId,
-    verificationStatus: "Verified",
-    $or: [
-      {
-        appointmentDate: {
-          $gte: new Date(year, month, 1, 0, 0, 0, 0),
-          $lte: new Date(year, month + 1, 0, 23, 59, 59, 999)
-        }
-      },
-      {
-        $and: [
-          { appointmentDate: null },
-          {
-            createdAt: {
-              $gte: new Date(year, month, 1, 0, 0, 0, 0),
-              $lte: new Date(year, month + 1, 0, 23, 59, 59, 999)
-            }
-          }
-        ]
-      }
+    $and: [
+      empFilter,
+      dateFilter,
+      { verificationStatus: "Verified" }
     ]
   })
-    .select("appointmentDate createdAt")
+    .select("appointmentDate leadDate createdAt")
     .lean();
 
-  // Group by date string
+  // Group by date string (prioritizing date within target month)
   const byDate = {};
   records.forEach((r) => {
-    const dt = r.appointmentDate || r.createdAt;
-    const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
-    byDate[key] = (byDate[key] || 0) + 1;
+    let dt = r.appointmentDate;
+    if (!dt || dt < startOfMonth || dt > endOfMonth) {
+      if (r.leadDate && r.leadDate >= startOfMonth && r.leadDate <= endOfMonth) {
+        dt = r.leadDate;
+      } else {
+        dt = r.createdAt;
+      }
+    }
+    if (dt) {
+      const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+      byDate[key] = (byDate[key] || 0) + 1;
+    }
   });
 
   const history = [];
@@ -518,11 +686,25 @@ export async function getEmployeeDailyHistory(employeeId, month, year) {
 
 /**
  * Calculate rankings for all employees for a given month/year.
- * Returns sorted array with rank, tie-breakers applied.
+ * Supports filtering by department, branch, designation, and employee.
+ * Uses deterministic tie-breaking rules:
+ * 1. Overall rankingScore (descending)
+ * 2. Monthly sales volume (descending)
+ * 3. Appointment achievement % (descending)
+ * 4. Completed appointments count (descending)
+ * 5. Employee Name (alphabetical ascending for complete determinism)
  */
-export async function calculateEmployeeRankings(month, year) {
-  const employees = await User.find({ role: "employee", isDeleted: { $ne: true } })
-    .select("name email _id createdAt")
+export async function calculateEmployeeRankings(month, year, filterOptions = {}) {
+  const userQuery = { role: "employee", isDeleted: { $ne: true } };
+  if (filterOptions.departmentId) userQuery.departmentId = filterOptions.departmentId;
+  if (filterOptions.branchId) userQuery.branchId = filterOptions.branchId;
+  if (filterOptions.designation) userQuery.designation = filterOptions.designation;
+  if (filterOptions.employeeId) userQuery._id = filterOptions.employeeId;
+
+  const employees = await User.find(userQuery)
+    .select("name email _id createdAt joiningDate departmentId branchId designation")
+    .populate("departmentId", "name code")
+    .populate("branchId", "name city code")
     .lean();
 
   const performances = await Promise.all(
@@ -531,27 +713,41 @@ export async function calculateEmployeeRankings(month, year) {
         emp._id,
         month,
         year,
-        emp.createdAt
+        emp.joiningDate || null
       );
       return {
-        employee: { id: emp._id, name: emp.name, email: emp.email },
+        employee: {
+          id: emp._id,
+          name: emp.name,
+          email: emp.email,
+          designation: emp.designation || "Executive",
+          department: emp.departmentId ? { id: emp.departmentId._id, name: emp.departmentId.name, code: emp.departmentId.code } : null,
+          branch: emp.branchId ? { id: emp.branchId._id, name: emp.branchId.name, city: emp.branchId.city, code: emp.branchId.code } : null
+        },
         ...perf
       };
     })
   );
 
-  // Sort: rankingScore desc, then sales desc, then appt achievement desc, then completed desc
+  // Deterministic multi-tier sort:
   performances.sort((a, b) => {
+    // 1. Overall rankingScore
     const rs = b.performance.rankingScore - a.performance.rankingScore;
     if (rs !== 0) return rs;
+    // 2. Sales volume
     const sv = b.sales.monthlySales - a.sales.monthlySales;
     if (sv !== 0) return sv;
+    // 3. Appointment achievement %
     const ap = b.appointments.achievementPercent - a.appointments.achievementPercent;
     if (ap !== 0) return ap;
-    return b.appointments.completed - a.appointments.completed;
+    // 4. Completed appointments
+    const ac = b.appointments.completed - a.appointments.completed;
+    if (ac !== 0) return ac;
+    // 5. Deterministic tie-breaker: Employee Name
+    return String(a.employee.name).localeCompare(String(b.employee.name));
   });
 
-  // Assign ranks (same score = same rank)
+  // Assign ranks (same metrics = same rank)
   let rank = 1;
   return performances.map((p, i) => {
     if (i > 0) {
@@ -574,8 +770,8 @@ export async function calculateEmployeeRankings(month, year) {
 /**
  * Admin-level monthly performance summary with bonus liability.
  */
-export async function getAdminMonthlySummary(month, year) {
-  const rankings = await calculateEmployeeRankings(month, year);
+export async function getAdminMonthlySummary(month, year, filterOptions = {}) {
+  const rankings = await calculateEmployeeRankings(month, year, filterOptions);
   const config = await getTargetForDate(new Date(year, month, 15));
 
   const totalEmployees = rankings.length;
@@ -592,6 +788,7 @@ export async function getAdminMonthlySummary(month, year) {
 
   return {
     period: { month, year },
+    filterOptions,
     totalEmployees,
     meetingDailyTarget,
     belowDailyTarget,

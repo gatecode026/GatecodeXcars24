@@ -39,6 +39,8 @@ const FILTERS = [
   { key: "today", label: "Today" },
   { key: "yesterday", label: "Yesterday" },
   { key: "month", label: "This Month" },
+  { key: "last_month", label: "Last Month" },
+  { key: "all", label: "All Time" },
   { key: "custom", label: "Date Range" },
 ];
 
@@ -204,7 +206,17 @@ const EmployeeDashboardPage = () => {
           <div className="kpi-value">
             {loading ? <span className="skeleton-box" style={{ width: "60px", height: "28px" }} /> : stats.leadCount}
           </div>
-          <div className="kpi-subtext">Total leads generated &amp; assigned</div>
+          <div className="kpi-subtext">
+            {filter === "all"
+              ? "All-time customer leads"
+              : filter === "yesterday"
+              ? "Leads generated yesterday"
+              : filter === "today"
+              ? "Leads generated today"
+              : filter === "last_month"
+              ? "Leads generated last month"
+              : "Leads in selected period"}
+          </div>
         </div>
 
         <div className="kpi-card">

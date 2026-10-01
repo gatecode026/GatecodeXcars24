@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
@@ -54,7 +54,7 @@ const ShieldIcon = () => (
 const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { user, login, loading: authLoading } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -62,6 +62,25 @@ const LoginPage = () => {
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
+
+  // If user is already authenticated, smoothly redirect to dashboard without flashing the form
+  useEffect(() => {
+    if (user && !user.guest) {
+      const targetRole = user.role || "employee";
+      navigate(
+        targetRole === "admin" || targetRole === "tl" ? "/admin/dashboard" : "/employee/dashboard",
+        { replace: true }
+      );
+    }
+  }, [user, navigate]);
+
+  if (authLoading || (user && !user.guest)) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "#f8fafc" }}>
+        <div className="spinner-border" style={{ width: "36px", height: "36px", color: "#0284c7" }} />
+      </div>
+    );
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();

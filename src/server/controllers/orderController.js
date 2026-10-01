@@ -77,6 +77,7 @@ export const updateOrder = async (req, res, next) => {
     }
     const allowedFields = [
       "customerName", "mobileNumber", "alternateMobileNumber", "fullAddress", "pincode",
+      "carModel", "carNumber", "fuelType", "manufacturingYear", "odometerKm",
       "productType", "customProductName", "numberOfUnits", "amount",
       "totalAmount", "advanceAmount", "dateOfOrder", "orderStatus",
       "parcelStatus", "trackingId", "courierCompany", "bankName"

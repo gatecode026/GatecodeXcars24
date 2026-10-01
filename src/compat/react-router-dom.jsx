@@ -99,14 +99,22 @@ NavLink.displayName = "NavLink";
 export const Navigate = ({ to, replace = true }) => {
   const router = useRouter();
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    try {
       if (replace) {
-        window.location.replace(to);
+        router.replace(to);
       } else {
-        window.location.assign(to);
+        router.push(to);
+      }
+    } catch (_) {
+      if (typeof window !== "undefined") {
+        if (replace) {
+          window.location.replace(to);
+        } else {
+          window.location.assign(to);
+        }
       }
     }
-  }, [to, replace]);
+  }, [to, replace, router]);
 
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "#f8fafc" }}>

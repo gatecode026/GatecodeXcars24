@@ -4,6 +4,7 @@ import { User } from "../models/User.js";
 import { EmployeeRecord } from "../models/EmployeeRecord.js";
 import { recordActivity } from "./activityController.js";
 import { sendTLWhatsAppNotification } from "../services/whatsappNotificationService.js";
+import { can } from "../services/authorizationService.js";
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -34,6 +35,11 @@ const buildDateRange = (period, fromDate, toDate) => {
     case "month": {
       const s = new Date(now.getFullYear(), now.getMonth(), 1); s.setHours(0, 0, 0, 0);
       const e = new Date(now); e.setHours(23, 59, 59, 999);
+      return { $gte: s, $lte: e };
+    }
+    case "last_month": {
+      const s = new Date(now.getFullYear(), now.getMonth() - 1, 1); s.setHours(0, 0, 0, 0);
+      const e = new Date(now.getFullYear(), now.getMonth(), 0); e.setHours(23, 59, 59, 999);
       return { $gte: s, $lte: e };
     }
     case "custom": {
@@ -365,6 +371,14 @@ export const updateCustomer = async (req, res, next) => {
       return res.status(404).json({ message: "Customer / Lead not found" });
     }
 
+    // RBAC Authorization & IDOR protection
+    if (!can(req.user, "update", "customers", customer)) {
+      return res.status(403).json({
+        message: "Forbidden. You are not authorized to update this customer lead.",
+        code: "ERR_FORBIDDEN"
+      });
+    }
+
     // Staff/TL/Admins can update lead status and details, recorded in audit logs
     const previousStatus = customer.verificationStatus;
     const previousDate = customer.appointmentDate ? new Date(customer.appointmentDate).getTime() : null;
@@ -373,7 +387,7 @@ export const updateCustomer = async (req, res, next) => {
       "customerName", "mobile", "email", "remark", "district", "state", "followUp",
       "appointmentId", "leadDate", "appointmentDate", "carNumber", "leadBy",
       "followUpBy", "followUpDate", "verified", "verificationStatus", "odometerKm",
-      "leadStatus", "assignedTo"
+      "leadStatus", "assignedTo", "rescheduledDate", "rescheduleCount", "cancellationReason"
     ];
 
     updatableFields.forEach((field) => {
@@ -393,8 +407,13 @@ export const updateCustomer = async (req, res, next) => {
               customer.leadStatus = "Follow-up";
             } else if (req.body.verificationStatus === "Pending") {
               customer.leadStatus = "Pending";
-            } else if (req.body.verificationStatus === "Rejected") {
+            } else if (req.body.verificationStatus === "Rejected" || req.body.verificationStatus === "Cancelled") {
               customer.leadStatus = "Cancelled";
+            } else if (req.body.verificationStatus === "Rescheduled") {
+              customer.leadStatus = "Rescheduled";
+              customer.rescheduleCount = (customer.rescheduleCount || 0) + 1;
+            } else if (req.body.verificationStatus === "No-Show") {
+              customer.leadStatus = "No-Show";
             }
           }
         } else {
@@ -483,8 +502,11 @@ export const deleteCustomer = async (req, res, next) => {
       return res.status(404).json({ message: "Customer / Lead not found" });
     }
 
-    if (req.user?.role === "employee" && String(customer.employeeId) !== String(req.user._id)) {
-      return res.status(403).json({ message: "Forbidden" });
+    if (!can(req.user, "delete", "customers", customer)) {
+      return res.status(403).json({
+        message: "Forbidden. You are not authorized to delete customer leads.",
+        code: "ERR_FORBIDDEN"
+      });
     }
 
     const name = customer.customerName;
