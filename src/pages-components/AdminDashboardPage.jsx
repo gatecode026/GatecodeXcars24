@@ -225,7 +225,15 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* ── Global Filter Bar (Section 4) ── */}
+      {/* ── 3-Row Executive KPI Grid (Cards show at top) ── */}
+      <PerformanceKpiGrid
+        data={kpiData}
+        loading={loading}
+        error={error}
+        onRetry={fetchAll}
+      />
+
+      {/* ── Global Filter Bar ── */}
       <GlobalFilterBar
         month={month}
         year={year}
@@ -241,14 +249,6 @@ export default function AdminDashboardPage() {
         exporting={exporting}
         onRefresh={fetchAll}
         loading={loading}
-      />
-
-      {/* ── 3-Row Executive KPI Grid (Section 3) ── */}
-      <PerformanceKpiGrid
-        data={kpiData}
-        loading={loading}
-        error={error}
-        onRetry={fetchAll}
       />
 
       {/* ── Performance Charts Grid (Section 11) ── */}
