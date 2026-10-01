@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { api, emitDataSync } from "../api/client";
 import Field from "../components/Field";
 import { isValidMobile, isValidPincode } from "../utils/validators";
 
@@ -57,7 +57,8 @@ const ReturnPage = () => {
     if (!validate()) return;
     try {
       setLoading(true);
-      await api.post("/returns", { ...form, numberOfUnitsReturning: Number(form.numberOfUnitsReturning) });
+      const res = await api.post("/returns", { ...form, numberOfUnitsReturning: Number(form.numberOfUnitsReturning) });
+      emitDataSync({ type: "return", action: "create", record: res.data?.data });
       navigate("/admin/returns/manage", { replace: true });
     } catch (error) {
       const errMsg = error.response?.data?.message || "Failed to submit return request";

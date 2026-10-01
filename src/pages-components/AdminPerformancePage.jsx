@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
-import { api } from "../api/client";
+import { api, onDataSync } from "../api/client";
 import GlobalFilterBar from "../components/dashboard/GlobalFilterBar";
 import PerformanceKpiGrid from "../components/dashboard/PerformanceKpiGrid";
 import LeaderboardTable from "../components/dashboard/LeaderboardTable";
@@ -124,21 +124,35 @@ export default function AdminPerformancePage() {
     setBonus(res.data?.data);
   }, [buildQuery]);
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
+  const fetchAll = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       await Promise.all([fetchRankings(), fetchBonus(), fetchSettings()]);
     } catch (err) {
       console.error("Error fetching performance data:", err);
-      setError(err.response?.data?.message || "Failed to load performance metrics from server.");
+      if (!silent) setError(err.response?.data?.message || "Failed to load performance metrics from server.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [fetchRankings, fetchBonus, fetchSettings]);
 
   useEffect(() => {
     fetchAll();
+  }, [fetchAll]);
+
+  // Real-time synchronization
+  useEffect(() => {
+    const unsub = onDataSync(() => {
+      fetchAll(true);
+    });
+    return unsub;
+  }, [fetchAll]);
+
+  useEffect(() => {
+    const onFocus = () => fetchAll(true);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [fetchAll]);
 
   const handleFilterChange = (updates) => {

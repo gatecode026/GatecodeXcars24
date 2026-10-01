@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { api, toAbsoluteAssetUrl } from "../api/client";
+import { api, toAbsoluteAssetUrl, emitDataSync, onDataSync } from "../api/client";
 import DataTable from "../components/DataTable";
 import EditModal from "../components/EditModal";
 import Toast from "../components/Toast";
@@ -85,7 +85,7 @@ const orderEditFields = [
 const parcelStatusOptions = ["Pending", "Process", "Parcel", "Packed", "Dispatched", "Delivered"];
 
 const fetchOrders = async () => {
-  const res = await api.get("/orders");
+  const res = await api.get("/orders", { forceRefresh: true });
   if (!res.data?.data) return [];
   return res.data.data;
 };
@@ -160,25 +160,73 @@ const OrderManagePage = () => {
     return () => { mounted = false; };
   }, []);
 
+  // Multi-tab real-time synchronization
+  useEffect(() => {
+    const unsub = onDataSync((evt) => {
+      if (evt?.type === "order") {
+        fetchOrders().then((data) => setOrders(data)).catch(() => {});
+      }
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const onFocus = () => fetchOrders().then((data) => setOrders(data)).catch(() => {});
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
   const handleRefresh = useCallback(() => {
     setLoading(true);
     fetchOrders().then((data) => { setOrders(data); setLoading(false); }).catch((e) => { setLoading(false); console.error("Failed to refresh orders:", e); });
   }, []);
 
   const updateOrderStatus = async (id, status) => {
-    await api.patch(`/orders/${id}/status`, { orderStatus: status });
-    handleRefresh();
+    // Immediately update row in table without reload
+    setOrders((prev) => prev.map((o) => (o._id === id ? { ...o, orderStatus: status } : o)));
+    try {
+      const res = await api.patch(`/orders/${id}/status`, { orderStatus: status });
+      const updated = res.data?.data;
+      if (updated) {
+        setOrders((prev) => prev.map((o) => (o._id === id ? { ...o, ...updated } : o)));
+      }
+      emitDataSync({ type: "order", action: "update", id, status });
+    } catch (err) {
+      console.error("Failed to update order status:", err);
+      fetchOrders().then((data) => setOrders(data));
+      setToast(err.response?.data?.message || "Failed to update order status");
+    }
   };
 
   const updateParcelStatus = async (id, parcelStatus) => {
-    await api.patch(`/orders/${id}/parcel-status`, { parcelStatus });
-    handleRefresh();
+    // Immediately update parcel status in table without reload
+    setOrders((prev) => prev.map((o) => (o._id === id ? { ...o, parcelStatus } : o)));
+    try {
+      const res = await api.patch(`/orders/${id}/parcel-status`, { parcelStatus });
+      const updated = res.data?.data;
+      if (updated) {
+        setOrders((prev) => prev.map((o) => (o._id === id ? { ...o, ...updated } : o)));
+      }
+      emitDataSync({ type: "order", action: "update", id, parcelStatus });
+    } catch (err) {
+      console.error("Failed to update parcel status:", err);
+      fetchOrders().then((data) => setOrders(data));
+      setToast(err.response?.data?.message || "Failed to update parcel status");
+    }
   };
 
   const handleDelete = async (row) => {
     if (!window.confirm(`Delete order for "${row.customerName}"? This cannot be undone.`)) return;
-    await api.delete(`/orders/${row._id}`);
-    handleRefresh();
+    // Immediately remove row from table without reload
+    setOrders((prev) => prev.filter((o) => o._id !== row._id));
+    try {
+      await api.delete(`/orders/${row._id}`);
+      emitDataSync({ type: "order", action: "delete", id: row._id });
+    } catch (err) {
+      console.error("Failed to delete order:", err);
+      fetchOrders().then((data) => setOrders(data));
+      setToast(err.response?.data?.message || "Failed to delete order");
+    }
   };
 
   const handleEdit = (row) => {
@@ -189,10 +237,13 @@ const OrderManagePage = () => {
 
   const handleSaveEdit = async (form) => {
     try {
-      await api.put(`/orders/${form._id}`, form);
+      const res = await api.put(`/orders/${form._id}`, form);
+      const updated = res.data?.data || form;
+      // Immediately update row in table without reload
+      setOrders((prev) => prev.map((o) => (o._id === form._id ? { ...o, ...updated } : o)));
       setToast("Order updated successfully!");
-      handleRefresh();
-      setTimeout(() => setEditRow(null), 500);
+      setEditRow(null);
+      emitDataSync({ type: "order", action: "update", record: updated });
     } catch (error) {
       setToast(error.response?.data?.message || "Failed to update order");
     }
@@ -246,7 +297,8 @@ const OrderManagePage = () => {
   const handleImportOrders = async (rows) => {
     const res = await api.post("/orders/bulk-import", { rows });
     setToast(res.data?.message || `Imported ${rows.length} orders successfully!`);
-    handleRefresh();
+    emitDataSync({ type: "order", action: "bulk" });
+    fetchOrders().then((data) => setOrders(data));
   };
 
   const columns = [

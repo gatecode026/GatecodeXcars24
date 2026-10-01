@@ -40,7 +40,8 @@ export const getDashboardSummary = async (req, res, next) => {
 
     const userId = req.user?._id || req.user?.id || "guest";
     const userRole = req.user?.role || "employee";
-    const cacheKey = userRole === "employee" ? `emp_${userId}` : "admin";
+    const isPrivileged = ["superadmin", "admin", "manager", "tl"].includes(userRole);
+    const cacheKey = `${userRole}_${userId}`;
 
     const cached = dashboardCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < DASHBOARD_CACHE_TTL) {
@@ -54,13 +55,12 @@ export const getDashboardSummary = async (req, res, next) => {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
     sevenDaysAgo.setHours(0, 0, 0, 0);
 
-    // Filter scope for employee vs admin
+    // Filter scope for employee/non-privileged vs admin
     const customerFilter = {};
-    if (userRole === "employee") {
+    if (!isPrivileged) {
       customerFilter.$or = [
         { employeeId: req.user._id },
-        { assignedTo: req.user._id },
-        ...(req.user?.name ? [{ leadBy: new RegExp(`^${req.user.name.trim()}$`, "i") }] : [])
+        { assignedTo: req.user._id }
       ];
     }
 

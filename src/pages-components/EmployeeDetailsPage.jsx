@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { api } from "../api/client";
+import { api, onDataSync } from "../api/client";
 
 const formatDate = (d) =>
   d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "-";
@@ -306,9 +306,9 @@ const EmployeeDetailsPage = () => {
   const [downloading, setDownloading] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const fetchEmployees = useCallback(async () => {
+  const fetchEmployees = useCallback(async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const params = {};
       if (startDate) params.startDate = startDate;
       if (endDate) params.endDate = endDate;
@@ -317,12 +317,26 @@ const EmployeeDetailsPage = () => {
     } catch {
       setEmployees([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [startDate, endDate]);
 
   useEffect(() => {
     fetchEmployees();
+  }, [fetchEmployees]);
+
+  useEffect(() => {
+    const unsub = onDataSync(() => {
+      fetchEmployees({ silent: true });
+    });
+    const handleFocus = () => {
+      fetchEmployees({ silent: true });
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      unsub();
+      window.removeEventListener("focus", handleFocus);
+    };
   }, [fetchEmployees]);
 
   useEffect(() => {

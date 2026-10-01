@@ -2,7 +2,7 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { api, toAbsoluteAssetUrl } from "../api/client";
+import { api, toAbsoluteAssetUrl, emitDataSync, onDataSync } from "../api/client";
 import Toast from "../components/Toast";
 import CsvImportModal from "../components/CsvImportModal";
 import { exportTableToCsv } from "../utils/csvHelper";
@@ -168,7 +168,7 @@ const EmployeeReturnPage = () => {
   const fetchRecent = useCallback(async (isBackground = false) => {
     try {
       if (!isBackground) setInitialLoading(true);
-      const res = await api.get("/employee/returns");
+      const res = await api.get("/employee/returns", { forceRefresh: isBackground });
       setRecentReturns(res.data?.data || []);
     } catch {
       // silent
@@ -185,9 +185,17 @@ const EmployeeReturnPage = () => {
     }, 8000);
     const onFocus = () => fetchRecent(true);
     window.addEventListener("focus", onFocus);
+
+    const unsub = onDataSync((evt) => {
+      if (evt?.type === "return") {
+        fetchRecent(true);
+      }
+    });
+
     return () => {
       clearInterval(interval);
       window.removeEventListener("focus", onFocus);
+      unsub();
     };
   }, [fetchRecent]);
 
@@ -305,11 +313,15 @@ const EmployeeReturnPage = () => {
 
   const handleDeleteReturn = async (r) => {
     if (!window.confirm(`Delete return request for "${r.customerName}"? This cannot be undone.`)) return;
+    // Immediately remove from state without reload
+    setRecentReturns((prev) => prev.filter((ret) => ret._id !== r._id));
     try {
       await api.delete(`/employee/returns/${r._id}`);
       setToast("Return deleted successfully!");
+      emitDataSync({ type: "return", action: "delete", id: r._id });
       fetchRecent(true);
     } catch {
+      fetchRecent(true);
       setToast("Failed to delete return");
     }
   };
@@ -363,6 +375,7 @@ const EmployeeReturnPage = () => {
       } catch (_) {}
     }
     setToast("Processed CSV return requests");
+    emitDataSync({ type: "return", action: "bulk" });
     fetchRecent(true);
   };
 
@@ -372,19 +385,30 @@ const EmployeeReturnPage = () => {
     try {
       setLoading(true);
       if (editingId) {
-        await api.put(`/employee/returns/${editingId}`, {
+        const res = await api.put(`/employee/returns/${editingId}`, {
           ...form,
           numberOfUnitsReturning: Number(form.numberOfUnitsReturning),
         });
+        const updated = res.data?.data;
+        if (updated) {
+          setRecentReturns((prev) => prev.map((ret) => (ret._id === editingId ? { ...ret, ...updated } : ret)));
+        }
         setToast("Return updated successfully!");
+        emitDataSync({ type: "return", action: "update", record: updated });
       } else {
-        await api.post("/returns", { ...form, numberOfUnitsReturning: Number(form.numberOfUnitsReturning) });
+        const res = await api.post("/returns", { ...form, numberOfUnitsReturning: Number(form.numberOfUnitsReturning) });
+        const created = res.data?.data;
+        if (created) {
+          setRecentReturns((prev) => [created, ...prev.filter((ret) => ret._id !== created._id)]);
+        }
         setToast("Return request submitted successfully!");
+        emitDataSync({ type: "return", action: "create", record: created });
       }
       setForm(initialState);
       setEditingId(null);
       setErrors({});
       setIsFormOpen(false);
+      fetchRecent(true);
     } catch (error) {
       const errMsg = error.response?.data?.message || "Failed to submit return request";
       setToast(errMsg);

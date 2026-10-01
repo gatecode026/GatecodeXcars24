@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { api } from "../api/client";
+import { api, onDataSync } from "../api/client";
 import { exportTableToCsv } from "../utils/csvHelper";
 
 const SearchIcon = () => (
@@ -24,8 +24,8 @@ const ActivityLogsPage = () => {
   const [typeFilter, setTypeFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
 
-  const fetchLogs = useCallback(async () => {
-    setLoading(true);
+  const fetchLogs = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const params = {};
       if (typeFilter !== "all") params.type = typeFilter;
@@ -39,12 +39,26 @@ const ActivityLogsPage = () => {
         setLogs(fb.data?.data || []);
       } catch (_) {}
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [typeFilter]);
 
   useEffect(() => {
     fetchLogs();
+  }, [fetchLogs]);
+
+  useEffect(() => {
+    const unsub = onDataSync(() => {
+      fetchLogs({ silent: true });
+    });
+    const handleFocus = () => {
+      fetchLogs({ silent: true });
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      unsub();
+      window.removeEventListener("focus", handleFocus);
+    };
   }, [fetchLogs]);
 
   const filteredLogs = logs.filter((log) => {

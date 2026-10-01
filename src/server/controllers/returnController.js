@@ -1,6 +1,7 @@
 import { ensureDB } from "../config/db.js";
 import { ReturnRequest } from "../models/ReturnRequest.js";
 import { recordActivity } from "./activityController.js";
+import { invalidateDashboardCache } from "./dashboardController.js";
 
 export const createReturnRequest = async (req, res, next) => {
   try {
@@ -8,8 +9,20 @@ export const createReturnRequest = async (req, res, next) => {
     if (!dbReady) {
       return res.status(503).json({ message: "Database unavailable. Cannot create return request." });
     }
-    const employeeId = req.user?._id || req.user?.id || null;
-    const employeeName = req.user?.name || "";
+    const isPrivileged = ["superadmin", "admin", "manager", "tl"].includes(req.user?.role);
+    let employeeId = req.user?._id || req.user?.id || null;
+    let employeeName = req.user?.name || "";
+
+    if (isPrivileged && req.body.employeeId && String(req.body.employeeId) !== String(employeeId)) {
+      try {
+        const User = (await import("../models/User.js")).User;
+        const targetUser = await User.findById(req.body.employeeId).select("_id name").lean();
+        if (targetUser) {
+          employeeId = targetUser._id;
+          employeeName = targetUser.name;
+        }
+      } catch (_) {}
+    }
 
     const payload = {
       ...req.body,
@@ -34,6 +47,7 @@ export const createReturnRequest = async (req, res, next) => {
       metadata: { returnId: request._id, reason: request.returnReason }
     }).catch(() => {});
 
+    invalidateDashboardCache();
     return res.status(201).json({ message: "Return request created", data: request });
   } catch (error) {
     return next(error);
@@ -88,6 +102,7 @@ export const updateReturn = async (req, res, next) => {
       metadata: { returnId: request._id, status: request.returnStatus }
     }).catch(() => {});
 
+    invalidateDashboardCache();
     return res.status(200).json({ message: "Return updated successfully", data: request });
   } catch (error) {
     return next(error);
@@ -120,6 +135,7 @@ export const deleteReturn = async (req, res, next) => {
       metadata: { returnId: request._id }
     }).catch(() => {});
 
+    invalidateDashboardCache();
     return res.status(200).json({ message: "Return request deleted successfully" });
   } catch (error) {
     return next(error);
@@ -140,6 +156,7 @@ export const updateReturnStatus = async (req, res, next) => {
     if (!request) {
       return res.status(404).json({ message: "Return request not found" });
     }
+    invalidateDashboardCache();
     return res.status(200).json({ message: "Return status updated", data: request });
   } catch (error) {
     return next(error);

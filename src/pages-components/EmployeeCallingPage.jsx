@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { api } from "../api/client";
+import { api, emitDataSync, onDataSync } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import Toast from "../components/Toast";
 import CsvImportModal from "../components/CsvImportModal";
@@ -251,7 +251,8 @@ const EmployeeCallingPage = () => {
   const handleImportCallingRecords = async (rows) => {
     const res = await api.post("/employee/calling-records/bulk-import", { rows });
     showToast(res.data?.message || `Imported ${rows.length} calling records successfully!`, "success");
-    fetchRecords();
+    emitDataSync({ type: "calling", action: "bulk" });
+    fetchRecords(false);
   };
 
   const handleExportCSV = () => {
@@ -333,25 +334,41 @@ const EmployeeCallingPage = () => {
     return Object.keys(next).length === 0;
   };
 
-  const fetchRecords = useCallback(async () => {
+  const fetchRecords = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const params = { filter };
       if (filter === "custom") {
         if (startDate) params.startDate = startDate;
         if (endDate) params.endDate = endDate;
       }
-      const res = await api.get("/employee/calling-records", { params });
+      const res = await api.get("/employee/calling-records", { params, forceRefresh: silent });
       setRecords(res.data.data || []);
     } catch {
       setRecords([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [filter, startDate, endDate]);
 
   useEffect(() => {
     fetchRecords();
+  }, [fetchRecords]);
+
+  // Multi-tab real-time synchronization
+  useEffect(() => {
+    const unsub = onDataSync((evt) => {
+      if (evt?.type === "calling") {
+        fetchRecords(true);
+      }
+    });
+    return unsub;
+  }, [fetchRecords]);
+
+  useEffect(() => {
+    const onFocus = () => fetchRecords(true);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [fetchRecords]);
 
   const handleChange = (e) => {
@@ -387,18 +404,28 @@ const EmployeeCallingPage = () => {
       };
 
       if (editingId) {
-        await api.put(`/employee/calling-records/${editingId}`, payload);
+        const res = await api.put(`/employee/calling-records/${editingId}`, payload);
+        const updated = res.data?.data;
+        if (updated) {
+          setRecords((prev) => prev.map((rec) => (rec._id === editingId ? { ...rec, ...updated } : rec)));
+        }
         setToast("Calling report updated successfully!");
+        emitDataSync({ type: "calling", action: "update", record: updated });
       } else {
-        await api.post("/employee/calling-records", payload);
+        const res = await api.post("/employee/calling-records", payload);
+        const created = res.data?.data;
+        if (created) {
+          setRecords((prev) => [created, ...prev.filter((rec) => rec._id !== created._id)]);
+        }
         setToast("Calling report submitted successfully!");
+        emitDataSync({ type: "calling", action: "create", record: created });
       }
 
       setForm(getInitialState());
       setEditingId(null);
       setErrors({});
       setIsFormOpen(false);
-      fetchRecords();
+      fetchRecords(true);
     } catch (error) {
       const errMsg = error.response?.data?.message || "Failed to save calling report";
       setToast(errMsg);
@@ -1025,11 +1052,15 @@ const EmployeeCallingPage = () => {
                             title="Delete Record"
                             onClick={async () => {
                               if (!window.confirm(`Delete calling record of ${formatDate(r.date)}?`)) return;
+                              // Immediately remove row from table without reload
+                              setRecords((prev) => prev.filter((rec) => rec._id !== r._id));
                               try {
                                 await api.delete(`/employee/calling-records/${r._id}`);
                                 setToast("Calling report deleted successfully!");
-                                fetchRecords();
+                                emitDataSync({ type: "calling", action: "delete", id: r._id });
+                                fetchRecords(true);
                               } catch (error) {
+                                fetchRecords(true);
                                 setToast(error.response?.data?.message || "Failed to delete record");
                               }
                             }}

@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { api, emitDataSync } from "../api/client";
 import Field from "../components/Field";
 import { isValidMobile, isValidPincode } from "../utils/validators";
 
@@ -146,7 +146,8 @@ const OrderPage = () => {
       payload.append("courierCompany", form.courierCompany);
       payload.append("bankName", form.bankName);
       if (paymentFile) payload.append("paymentScreenshot", paymentFile);
-      await api.post("/orders", payload);
+      const res = await api.post("/orders", payload);
+      emitDataSync({ type: "order", action: "create", record: res.data?.data });
       navigate("/admin/orders/manage", { replace: true });
     } catch (error) {
       const errMsg = error.response?.data?.message || "Failed to submit order";

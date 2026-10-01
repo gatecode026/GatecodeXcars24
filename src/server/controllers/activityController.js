@@ -67,15 +67,15 @@ export const getActivities = async (req, res, next) => {
 
     const query = {};
 
-    // Role-based visibility
-    if (userRole === "employee") {
-      // Employee sees activities they performed, OR where they are the affected employee (e.g. TL edited their lead)
+    // Role-based visibility: non-privileged users only see activities they performed or where they are affected
+    const isPrivileged = ["superadmin", "admin", "manager", "tl"].includes(userRole);
+    if (!isPrivileged) {
       query.$or = [
         { performedBy: userId },
         { affectedEmployeeId: userId }
       ];
     }
-    // Admin / TL sees all activities
+    // Admin / TL / Manager sees all activities
 
     if (req.query.type && req.query.type !== "all") {
       const t = String(req.query.type).toLowerCase();

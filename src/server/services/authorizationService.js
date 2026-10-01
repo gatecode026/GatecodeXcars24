@@ -40,14 +40,14 @@ const ROLE_PERMISSIONS = {
     "dashboard:read",
     "employees:read",
     "customers:read", "customers:create", "customers:update",
-    "orders:read", "orders:create",
+    "orders:read", "orders:create", "orders:update",
     "performance:read",
     "lookups:read"
   ],
   employee: [
     "dashboard:read",
     "customers:read", "customers:create", "customers:update",
-    "orders:read", "orders:create",
+    "orders:read", "orders:create", "orders:update",
     "performance:read",
     "lookups:read"
   ],
@@ -63,7 +63,7 @@ const ROLE_PERMISSIONS = {
   user: [
     "dashboard:read",
     "customers:read", "customers:create", "customers:update",
-    "orders:read", "orders:create",
+    "orders:read", "orders:create", "orders:update",
     "performance:read",
     "lookups:read"
   ]
@@ -128,18 +128,23 @@ export function can(user, action, resource, targetEntity = null) {
     // Employees can only mutate their own leads or leads assigned to them
     const empIdStr = targetEntity.employeeId ? String(targetEntity.employeeId) : "";
     const assignedToStr = targetEntity.assignedTo ? String(targetEntity.assignedTo) : "";
-    const isOwner = empIdStr === userIdStr || assignedToStr === userIdStr;
+    const isOwner = (empIdStr && empIdStr === userIdStr) || (assignedToStr && assignedToStr === userIdStr);
 
-    // Additionally, verify leadBy name match as fallback
-    const isLeadBy = user.name && targetEntity.leadBy &&
-      String(user.name).trim().toLowerCase() === String(targetEntity.leadBy).trim().toLowerCase();
+    // Fallback to leadBy ONLY if the record has no assigned employeeId or assignedTo (legacy unowned record)
+    const hasOwnerId = Boolean(empIdStr || assignedToStr);
+    const isLeadBy = !hasOwnerId && Boolean(
+      user.name && targetEntity.leadBy &&
+      String(user.name).trim().toLowerCase() === String(targetEntity.leadBy).trim().toLowerCase()
+    );
+
+    const isAuthorized = isOwner || isLeadBy;
 
     if (action === "update" || action === "delete") {
       // Employees cannot delete leads (only Admins can delete)
       if (action === "delete") return false;
-      return isOwner || isLeadBy;
+      return isAuthorized;
     }
-    return isOwner || isLeadBy;
+    return isAuthorized;
   }
 
   if (resource === "orders") {

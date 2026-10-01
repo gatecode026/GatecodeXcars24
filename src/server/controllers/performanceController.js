@@ -2,6 +2,7 @@ import { ensureDB } from "../config/db.js";
 import { PerformanceTarget } from "../models/PerformanceTarget.js";
 import { User } from "../models/User.js";
 import { recordActivity } from "./activityController.js";
+import { invalidateDashboardCache } from "./dashboardController.js";
 import {
   getCurrentTarget,
   getTargetForDate,
@@ -139,6 +140,7 @@ export const updatePerformanceSettings = async (req, res, next) => {
     });
 
     invalidateTargetCache();
+    invalidateDashboardCache();
 
     return res.status(200).json({
       message: "Performance settings updated successfully.",

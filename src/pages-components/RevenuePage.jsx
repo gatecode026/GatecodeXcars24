@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { api } from "../api/client";
+import { api, onDataSync } from "../api/client";
 import { exportTableToCsv } from "../utils/csvHelper";
 
 const RevenueIcon = () => (
@@ -38,8 +38,8 @@ const RevenuePage = () => {
   const [revenue, setRevenue] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async (m, y) => {
-    setLoading(true);
+  const load = useCallback(async (m, y, silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await api.get("/admin/revenue-summary", {
         params: { month: m, year: y }
@@ -47,13 +47,27 @@ const RevenuePage = () => {
       setRevenue(res.data.data);
     } catch (err) {
       console.error("Failed to load revenue", err);
-      setRevenue(null);
+      if (!silent) setRevenue(null);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => { load(month, year); }, [month, year, load]);
+
+  // Real-time synchronization
+  useEffect(() => {
+    const unsub = onDataSync(() => {
+      load(month, year, true);
+    });
+    return unsub;
+  }, [month, year, load]);
+
+  useEffect(() => {
+    const onFocus = () => load(month, year, true);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [month, year, load]);
 
   const prevMonth = () => {
     if (month === 0) { setMonth(11); setYear(y => y - 1); }

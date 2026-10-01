@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
-import { api } from "../api/client";
+import { api, onDataSync } from "../api/client";
 import { exportTableToCsv } from "../utils/csvHelper";
 
 // ─── Clean SVG Line Icons (Matching Website Theme) ───────────────────────────
@@ -163,8 +163,8 @@ export default function EmployeePerformancePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const [perfRes, histRes] = await Promise.all([
@@ -175,14 +175,28 @@ export default function EmployeePerformancePage() {
       setHistory(histRes.data?.data || []);
     } catch (err) {
       console.error("Failed to load employee performance:", err);
-      setError(err.response?.data?.message || "Failed to load employee performance from server.");
+      if (!silent) setError(err.response?.data?.message || "Failed to load employee performance from server.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [month, year]);
 
   useEffect(() => {
     fetchData();
+  }, [fetchData]);
+
+  // Real-time synchronization
+  useEffect(() => {
+    const unsub = onDataSync(() => {
+      fetchData(true);
+    });
+    return unsub;
+  }, [fetchData]);
+
+  useEffect(() => {
+    const onFocus = () => fetchData(true);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [fetchData]);
 
   const m = data?.monthly;

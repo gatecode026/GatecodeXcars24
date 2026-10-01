@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { api } from "../api/client";
+import { api, emitDataSync, onDataSync } from "../api/client";
 import CsvImportModal from "../components/CsvImportModal";
 import { exportTableToCsv } from "../utils/csvHelper";
 
@@ -105,6 +105,7 @@ const SalesPage = () => {
     }));
     const res = await api.post("/orders/bulk-import", { rows: mappedRows });
     alert(res.data?.message || `Imported ${rows.length} sales records successfully!`);
+    emitDataSync({ type: "order", action: "bulk" });
     load(month, year, true);
   };
 
@@ -126,6 +127,20 @@ const SalesPage = () => {
 
   useEffect(() => {
     load(month, year);
+  }, [month, year, load]);
+
+  // Real-time multi-tab and cross-component sync
+  useEffect(() => {
+    const unsub = onDataSync(() => {
+      load(month, year, true);
+    });
+    return unsub;
+  }, [month, year, load]);
+
+  useEffect(() => {
+    const onFocus = () => load(month, year, true);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [month, year, load]);
 
   const prevMonth = () => {

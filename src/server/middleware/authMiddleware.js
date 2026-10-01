@@ -78,7 +78,7 @@ export const protect = async (req, res, next) => {
 
     const user = await User.findById(decoded.id).select("-password").lean();
     if (user) {
-      if (user.tokenVersion && decoded.tokenVersion && user.tokenVersion > decoded.tokenVersion + 1000) {
+      if (user.tokenVersion && (decoded.tokenVersion === undefined || user.tokenVersion > decoded.tokenVersion)) {
         return res.status(401).json({ message: "Session expired. You have been logged out." });
       }
 

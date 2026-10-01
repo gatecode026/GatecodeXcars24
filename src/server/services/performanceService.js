@@ -140,7 +140,11 @@ export async function buildEmployeeScopeFilter(employeeId) {
   try {
     const emp = await User.findById(empId).select("name").lean();
     if (emp?.name && emp.name.trim()) {
-      conditions.push({ leadBy: new RegExp(`^${emp.name.trim()}$`, "i") });
+      // Fallback to leadBy ONLY for legacy documents where employeeId is completely unset
+      conditions.push({
+        leadBy: new RegExp(`^${emp.name.trim()}$`, "i"),
+        employeeId: { $in: [null, undefined] }
+      });
     }
   } catch (_) {}
   return { $or: conditions };

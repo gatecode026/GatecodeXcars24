@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { api, toAbsoluteAssetUrl } from "../api/client";
+import { api, toAbsoluteAssetUrl, emitDataSync, onDataSync } from "../api/client";
 import DataTable from "../components/DataTable";
 import { exportTableToCsv } from "../utils/csvHelper";
 
@@ -76,7 +76,7 @@ const columns = [
 ];
 
 const fetchOrders = async () => {
-  const res = await api.get("/orders");
+  const res = await api.get("/orders", { forceRefresh: true });
   if (!res.data?.data) return [];
   return res.data.data;
 };
@@ -101,6 +101,22 @@ const OrderHistoryPage = () => {
     return () => { mounted = false; };
   }, []);
 
+  // Multi-tab real-time sync
+  useEffect(() => {
+    const unsub = onDataSync((evt) => {
+      if (evt?.type === "order") {
+        fetchOrders().then((data) => setOrders(data)).catch(() => {});
+      }
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const onFocus = () => fetchOrders().then((data) => setOrders(data)).catch(() => {});
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
   const handleRefresh = () => {
     setLoading(true);
     fetchOrders().then((data) => { setOrders(data); setLoading(false); }).catch((e) => { setLoading(false); console.error("Failed to refresh order history:", e); });
@@ -108,8 +124,14 @@ const OrderHistoryPage = () => {
 
   const handleDelete = async (row) => {
     if (!window.confirm(`Delete order for "${row.customerName}"? This cannot be undone.`)) return;
-    await api.delete(`/orders/${row._id}`);
-    handleRefresh();
+    setOrders((prev) => prev.filter((o) => o._id !== row._id));
+    try {
+      await api.delete(`/orders/${row._id}`);
+      emitDataSync({ type: "order", action: "delete", id: row._id });
+    } catch (err) {
+      console.error("Failed to delete order:", err);
+      fetchOrders().then((data) => setOrders(data));
+    }
   };
 
   const filteredOrders = orders.filter((o) => {

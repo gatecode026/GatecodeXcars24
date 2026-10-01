@@ -1,6 +1,7 @@
 import { ensureDB } from "../config/db.js";
 import { CallingRecord } from "../models/CallingRecord.js";
 import { User } from "../models/User.js";
+import { invalidateDashboardCache } from "./dashboardController.js";
 
 export const getCallingRecords = async (req, res, next) => {
   try {
@@ -76,6 +77,7 @@ export const createCallingRecord = async (req, res, next) => {
       createdBy: req.user?.id || req.user?._id
     });
 
+    invalidateDashboardCache();
     return res.status(201).json({
       message: "Calling record created successfully",
       data: record
@@ -97,6 +99,7 @@ export const deleteCallingRecord = async (req, res, next) => {
       return res.status(404).json({ message: "Calling record not found" });
     }
 
+    invalidateDashboardCache();
     return res.status(200).json({ message: "Calling record deleted successfully" });
   } catch (error) {
     return next(error);
@@ -201,6 +204,7 @@ export const bulkImportCallingRecords = async (req, res, next) => {
       }
     }
 
+    invalidateDashboardCache();
     return res.status(200).json({
       message: `Successfully imported ${insertedCount} calling record(s).`,
       count: insertedCount,

@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { api, emitDataSync, onDataSync } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import CsvImportModal from "../components/CsvImportModal";
 import { exportTableToCsv } from "../utils/csvHelper";
@@ -71,6 +71,7 @@ const UsersPage = () => {
   const handleImportUsers = async (rows) => {
     const res = await api.post("/users/bulk-import", { rows });
     alert(res.data?.message || `Imported ${rows.length} users successfully!`);
+    emitDataSync({ type: "user", action: "bulk" });
     fetchUsers();
   };
 
@@ -93,7 +94,7 @@ const UsersPage = () => {
   const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await api.get("/auth/users");
+      const res = await api.get("/auth/users", { forceRefresh: true });
       setUsers(res.data.data || []);
     } catch {
       setUsers([]);
@@ -104,6 +105,22 @@ const UsersPage = () => {
 
   useEffect(() => {
     fetchUsers();
+  }, [fetchUsers]);
+
+  // Real-time synchronization
+  useEffect(() => {
+    const unsub = onDataSync((evt) => {
+      if (evt?.type === "user") {
+        fetchUsers();
+      }
+    });
+    return unsub;
+  }, [fetchUsers]);
+
+  useEffect(() => {
+    const onFocus = () => fetchUsers();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [fetchUsers]);
 
   // Lock background scroll when modal is open
@@ -159,9 +176,11 @@ const UsersPage = () => {
     try {
       await api.delete(`/auth/users/${id}`);
       setUsers((prev) => prev.filter((u) => u._id !== id));
+      emitDataSync({ type: "user", action: "delete", id });
     } catch (err) {
       const msg = err.response?.data?.message || "Failed to delete user";
       alert(msg);
+      fetchUsers();
     }
   };
 

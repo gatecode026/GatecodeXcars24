@@ -5,6 +5,7 @@ import { EmployeeRecord } from "../models/EmployeeRecord.js";
 import { recordActivity } from "./activityController.js";
 import { sendTLWhatsAppNotification } from "../services/whatsappNotificationService.js";
 import { can } from "../services/authorizationService.js";
+import { invalidateDashboardCache } from "./dashboardController.js";
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -71,7 +72,8 @@ const buildCustomerFilter = (req) => {
   const conditions = [];
 
   // --- Role-based scoping (ALWAYS enforced on backend) ---
-  if (req.user?.role === "employee") {
+  const isPrivileged = ["superadmin", "admin", "manager", "tl"].includes(req.user?.role);
+  if (!isPrivileged) {
     conditions.push({ $or: [{ employeeId: req.user._id }, { assignedTo: req.user._id }] });
   } else if (req.query.employeeId) {
     conditions.push({ employeeId: req.query.employeeId });
@@ -287,11 +289,26 @@ export const createCustomer = async (req, res, next) => {
       leadStatus, assignedTo
     } = req.body;
 
+    const isPrivileged = ["superadmin", "admin", "manager", "tl"].includes(req.user?.role);
+    let targetEmployeeId = req.user._id || req.user.id;
+    let targetEmployeeName = req.user.name || "Employee";
+
+    // Only privileged roles (admin, TL, manager) can assign leads to other employees on creation
+    if (isPrivileged && req.body.employeeId && String(req.body.employeeId) !== String(targetEmployeeId)) {
+      try {
+        const targetUser = await User.findById(req.body.employeeId).select("_id name").lean();
+        if (targetUser) {
+          targetEmployeeId = targetUser._id;
+          targetEmployeeName = targetUser.name;
+        }
+      } catch (_) {}
+    }
+
     const generatedAptId = appointmentId?.trim() || `AP-${Math.floor(10000 + Math.random() * 90000)}`;
 
     const customer = await Customer.create({
-      employeeId: req.user._id || req.user.id,
-      employeeName: req.user.name || "Employee",
+      employeeId: targetEmployeeId,
+      employeeName: targetEmployeeName,
       customerName,
       mobile,
       email: email || "",
@@ -303,14 +320,14 @@ export const createCustomer = async (req, res, next) => {
       leadDate: leadDate ? new Date(leadDate) : new Date(),
       appointmentDate: appointmentDate ? new Date(appointmentDate) : null,
       carNumber: carNumber ? String(carNumber).trim().toUpperCase() : "",
-      leadBy: leadBy?.trim() || req.user.name || "Employee",
+      leadBy: isPrivileged ? (leadBy?.trim() || targetEmployeeName) : (req.user.name || "Employee"),
       followUpBy: followUpBy || "",
       followUpDate: followUpDate ? new Date(followUpDate) : null,
       verified: Boolean(verified),
       verificationStatus: verificationStatus || (verified ? "Verified" : "Pending"),
       odometerKm: Number(odometerKm) || 0,
       leadStatus: leadStatus || "Pending",
-      assignedTo: assignedTo || null
+      assignedTo: isPrivileged ? (assignedTo || null) : null
     });
 
     // Record activity audit log
@@ -349,6 +366,7 @@ export const createCustomer = async (req, res, next) => {
     } catch (_) {}
 
     invalidateEmployeesListCache();
+    invalidateDashboardCache();
 
     return res.status(201).json({
       message: "Lead created successfully",
@@ -390,8 +408,14 @@ export const updateCustomer = async (req, res, next) => {
       "leadStatus", "assignedTo", "rescheduledDate", "rescheduleCount", "cancellationReason"
     ];
 
+    const isPrivileged = ["superadmin", "admin", "manager", "tl"].includes(req.user?.role);
+    const nonPrivilegedBlockedFields = ["assignedTo", "employeeId", "employeeName", "leadBy"];
+
     updatableFields.forEach((field) => {
       if (req.body[field] !== undefined) {
+        if (!isPrivileged && nonPrivilegedBlockedFields.includes(field)) {
+          return; // Ignore unauthorized reassignment attempts by non-privileged roles
+        }
         if (field === "carNumber" && req.body[field]) {
           customer[field] = String(req.body[field]).trim().toUpperCase();
         } else if (field === "verified") {
@@ -480,6 +504,7 @@ export const updateCustomer = async (req, res, next) => {
     } catch (_) {}
 
     invalidateEmployeesListCache();
+    invalidateDashboardCache();
 
     return res.status(200).json({
       message: "Lead updated successfully",
@@ -548,6 +573,7 @@ export const deleteCustomer = async (req, res, next) => {
     } catch (_) {}
 
     invalidateEmployeesListCache();
+    invalidateDashboardCache();
 
     return res.status(200).json({ message: "Lead deleted successfully" });
   } catch (error) {
@@ -691,6 +717,7 @@ export const bulkImportCustomers = async (req, res, next) => {
     }
 
     invalidateEmployeesListCache();
+    invalidateDashboardCache();
 
     return res.status(200).json({
       message: `Successfully imported ${insertedCount} lead(s).`,

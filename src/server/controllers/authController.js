@@ -408,7 +408,9 @@ export const logoutUser = async (req, res, next) => {
     if (!await ensureDB()) {
       return res.status(200).json({ message: "Logged out successfully" });
     }
-    await User.findByIdAndUpdate(req.user._id, { tokenVersion: 0 });
+    if (req.user?._id && req.user._id !== "admin-fallback") {
+      await User.findByIdAndUpdate(req.user._id, { $inc: { tokenVersion: 1 } });
+    }
     return res.status(200).json({ message: "Logged out successfully" });
   } catch (error) {
     return next(error);
@@ -463,7 +465,7 @@ export const updateProfile = async (req, res, next) => {
         message: "Profile updated successfully",
         data: {
           id: userId || "admin-fallback",
-          name: name || "Uttam Admin",
+          name: name || process.env.ADMIN_NAME || "Surendra Admin",
           email: email || process.env.ADMIN_EMAIL,
           role: "admin",
           phoneNumber: phoneNumber || "",
@@ -512,17 +514,18 @@ export const updateProfile = async (req, res, next) => {
 
     // Password change
     if (newPassword && newPassword.trim()) {
-      if (currentPassword) {
-        const isMatch = await bcrypt.compare(currentPassword, user.password);
-        if (!isMatch) {
-          return res.status(400).json({ message: "Current password does not match. Please verify your current password." });
-        }
+      if (!currentPassword) {
+        return res.status(400).json({ message: "Current password is required to change your password." });
+      }
+      const isMatch = await bcrypt.compare(currentPassword, user.password);
+      if (!isMatch) {
+        return res.status(400).json({ message: "Current password does not match. Please verify your current password." });
       }
       if (newPassword.trim().length < 6) {
         return res.status(400).json({ message: "New password must be at least 6 characters long." });
       }
       user.password = await bcrypt.hash(newPassword.trim(), 10);
-      user.tokenVersion = Date.now();
+      user.tokenVersion = (user.tokenVersion || 0) + 1;
     }
 
     await user.save();

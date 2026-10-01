@@ -21,8 +21,29 @@ export const toAbsoluteAssetUrl = (assetPath = "") => {
 const inflightGetRequests = new Map();
 const getResponseCache = new Map();
 const CACHE_TTL_MS = 2500; // 2.5 seconds cache for instant tab transitions
+let cacheEpoch = Date.now();
 
-export const clearApiCache = (prefix = "") => {
+// Cross-tab and cross-component real-time event bus
+const syncListeners = new Set();
+let broadcastChannel = null;
+
+if (typeof window !== "undefined" && typeof BroadcastChannel !== "undefined") {
+  try {
+    broadcastChannel = new BroadcastChannel("crm_realtime_sync_channel");
+    broadcastChannel.onmessage = (evt) => {
+      if (evt?.data) {
+        clearApiCacheInternal();
+        syncListeners.forEach((fn) => {
+          try { fn(evt.data); } catch (e) { console.error("Broadcast sync listener error:", e); }
+        });
+      }
+    };
+  } catch (_) {}
+}
+
+const clearApiCacheInternal = (prefix = "") => {
+  cacheEpoch = Date.now();
+  inflightGetRequests.clear();
   if (!prefix) {
     getResponseCache.clear();
   } else {
@@ -34,15 +55,42 @@ export const clearApiCache = (prefix = "") => {
   }
 };
 
+export const clearApiCache = (prefix = "") => {
+  clearApiCacheInternal(prefix);
+};
+
+export const emitDataSync = (eventPayload = {}) => {
+  clearApiCacheInternal();
+  // Notify local subscribers in this tab
+  syncListeners.forEach((fn) => {
+    try { fn(eventPayload); } catch (e) { console.error("Local sync listener error:", e); }
+  });
+  // Notify other open tabs via BroadcastChannel
+  if (broadcastChannel) {
+    try {
+      broadcastChannel.postMessage(eventPayload);
+    } catch (_) {}
+  }
+};
+
+export const onDataSync = (callback) => {
+  syncListeners.add(callback);
+  return () => {
+    syncListeners.delete(callback);
+  };
+};
+
 // Override api.get to implement deduplication and micro-caching
 const originalGet = api.get.bind(api);
 api.get = function (url, config = {}) {
-  // If skipCache or responseType is blob/stream, pass through directly
-  if (config?.skipCache || config?.responseType === "blob") {
+  // If skipCache, forceRefresh, or responseType is blob/stream, pass through directly
+  if (config?.skipCache || config?.forceRefresh || config?.responseType === "blob") {
     return originalGet(url, config);
   }
 
-  const cacheKey = `${url}__${JSON.stringify(config?.params || {})}`;
+  const currentToken = typeof window !== "undefined" ? (localStorage.getItem("dashboard_token") || "anon") : "server";
+  const tokenSignature = currentToken.slice(-16);
+  const cacheKey = `${tokenSignature}__${url}__${JSON.stringify(config?.params || {})}`;
 
   // Check recent cached response
   const cached = getResponseCache.get(cacheKey);
@@ -56,12 +104,16 @@ api.get = function (url, config = {}) {
   }
 
   // Dispatch new request and track promise
+  const requestStart = Date.now();
   const requestPromise = originalGet(url, config)
     .then((response) => {
-      getResponseCache.set(cacheKey, {
-        timestamp: Date.now(),
-        response
-      });
+      // Only cache if no mutation/cache invalidation occurred while this request was in flight
+      if (requestStart >= cacheEpoch) {
+        getResponseCache.set(cacheKey, {
+          timestamp: Date.now(),
+          response
+        });
+      }
       return response;
     })
     .finally(() => {
@@ -84,10 +136,20 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (res) => {
-    // On state-changing operations, invalidate relevant cached GET requests
+    // On state-changing operations, invalidate relevant cached GET requests and broadcast sync
     const method = (res.config?.method || "").toLowerCase();
     if (method && method !== "get") {
-      clearApiCache();
+      clearApiCacheInternal();
+      const url = res.config?.url || "";
+      let type = "general";
+      if (url.includes("/customers")) type = "customer";
+      else if (url.includes("/orders")) type = "order";
+      else if (url.includes("/returns")) type = "return";
+      else if (url.includes("/calling-records") || url.includes("/employee/calling-records")) type = "calling";
+      else if (url.includes("/performance-settings")) type = "settings";
+      else if (url.includes("/users")) type = "user";
+
+      emitDataSync({ type, method, url, source: "interceptor" });
     }
     return res;
   },

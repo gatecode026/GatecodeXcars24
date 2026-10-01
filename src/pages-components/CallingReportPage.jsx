@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { api } from "../api/client";
+import { api, emitDataSync, onDataSync } from "../api/client";
 import CsvImportModal from "../components/CsvImportModal";
 import { exportTableToCsv } from "../utils/csvHelper";
 
@@ -294,7 +294,8 @@ const CallingReportPage = () => {
   const handleImportCallingRecords = async (rows) => {
     const res = await api.post("/calling-records/bulk-import", { rows });
     alert(res.data?.message || `Imported ${rows.length} calling records successfully!`);
-    fetchRecords();
+    emitDataSync({ type: "calling", action: "bulk" });
+    fetchRecords(false);
   };
 
   const handleExportCSV = () => {
@@ -346,9 +347,9 @@ const CallingReportPage = () => {
     }
   }, []);
 
-  const fetchRecords = useCallback(async () => {
+  const fetchRecords = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const params = {};
       if (selectedEmployee) params.employeeId = selectedEmployee;
 
@@ -375,12 +376,12 @@ const CallingReportPage = () => {
         if (endDate) params.endDate = endDate;
       }
 
-      const res = await api.get("/calling-records", { params });
+      const res = await api.get("/calling-records", { params, forceRefresh: silent });
       setRecords(res.data.data || []);
     } catch {
       setRecords([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [selectedEmployee, filter, startDate, endDate]);
 
@@ -390,6 +391,22 @@ const CallingReportPage = () => {
 
   useEffect(() => {
     fetchRecords();
+  }, [fetchRecords]);
+
+  // Multi-tab and cross-component sync
+  useEffect(() => {
+    const unsub = onDataSync((evt) => {
+      if (evt?.type === "calling") {
+        fetchRecords(true);
+      }
+    });
+    return unsub;
+  }, [fetchRecords]);
+
+  useEffect(() => {
+    const onFocus = () => fetchRecords(true);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [fetchRecords]);
 
   // Aggregate totals
@@ -446,12 +463,16 @@ const CallingReportPage = () => {
 
   const handleDelete = async (r) => {
     if (!window.confirm(`Delete calling record of ${r.employeeName || "Executive"} for ${formatDate(r.date)}?`)) return;
+    // Immediately remove row from state without reload
+    setRecords((prev) => prev.filter((rec) => rec._id !== r._id));
     try {
       setDeletingId(r._id);
       await api.delete(`/calling-records/${r._id}`);
-      fetchRecords();
+      emitDataSync({ type: "calling", action: "delete", id: r._id });
+      fetchRecords(true);
     } catch (err) {
       alert("Failed to delete record: " + (err.response?.data?.message || err.message));
+      fetchRecords(true);
     } finally {
       setDeletingId(null);
     }

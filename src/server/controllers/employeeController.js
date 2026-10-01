@@ -108,8 +108,7 @@ export const getEmployeeDashboard = async (req, res, next) => {
     const leadEmpFilter = {
       $or: [
         { employeeId },
-        { assignedTo: employeeId },
-        ...(req.user?.name ? [{ leadBy: new RegExp(`^${req.user.name.trim()}$`, "i") }] : [])
+        { assignedTo: employeeId }
       ]
     };
 

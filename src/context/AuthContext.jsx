@@ -7,7 +7,7 @@ import {
   useEffect,
   useCallback,
 } from "react";
-import { api } from "../api/client";
+import { api, clearApiCache } from "../api/client";
 
 const AuthContext = createContext(null);
 
@@ -83,6 +83,7 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         localStorage.setItem("dashboard_token", token);
       }
+      clearApiCache();
 
       const decoded = decodeToken(token) || serverUser;
       setUser(decoded);
@@ -99,6 +100,7 @@ export const AuthProvider = ({ children }) => {
       await api.post("/auth/logout");
     } catch {}
     localStorage.removeItem("dashboard_token");
+    clearApiCache();
     setUser(null);
   }, []);
 

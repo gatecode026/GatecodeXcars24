@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { api } from "../api/client";
+import { api, emitDataSync, onDataSync } from "../api/client";
 import DataTable from "../components/DataTable";
 import EditModal from "../components/EditModal";
 import Toast from "../components/Toast";
@@ -73,7 +73,7 @@ const columns = [
 ];
 
 const fetchReturns = async () => {
-  const res = await api.get("/returns");
+  const res = await api.get("/returns", { forceRefresh: true });
   if (!res.data?.data) return [];
   return res.data.data;
 };
@@ -146,20 +146,56 @@ const ReturnManagePage = () => {
     return () => { mounted = false; };
   }, []);
 
+  // Multi-tab real-time synchronization
+  useEffect(() => {
+    const unsub = onDataSync((evt) => {
+      if (evt?.type === "return") {
+        fetchReturns().then((data) => setReturns(data)).catch(() => {});
+      }
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const onFocus = () => fetchReturns().then((data) => setReturns(data)).catch(() => {});
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
   const handleRefresh = useCallback(() => {
     setLoading(true);
     fetchReturns().then((data) => { setReturns(data); setLoading(false); }).catch((e) => { setLoading(false); console.error("Failed to refresh returns:", e); });
   }, []);
 
   const updateReturnStatus = async (id, status) => {
-    await api.patch(`/returns/${id}/status`, { returnStatus: status });
-    handleRefresh();
+    // Immediately update row in table without reload
+    setReturns((prev) => prev.map((r) => (r._id === id ? { ...r, returnStatus: status } : r)));
+    try {
+      const res = await api.patch(`/returns/${id}/status`, { returnStatus: status });
+      const updated = res.data?.data;
+      if (updated) {
+        setReturns((prev) => prev.map((r) => (r._id === id ? { ...r, ...updated } : r)));
+      }
+      emitDataSync({ type: "return", action: "update", id, returnStatus: status });
+    } catch (err) {
+      console.error("Failed to update return status:", err);
+      fetchReturns().then((data) => setReturns(data));
+      setToast(err.response?.data?.message || "Failed to update return status");
+    }
   };
 
   const handleDelete = async (row) => {
     if (!window.confirm(`Delete return request for "${row.customerName}"? This cannot be undone.`)) return;
-    await api.delete(`/returns/${row._id}`);
-    handleRefresh();
+    // Immediately remove row from table without reload
+    setReturns((prev) => prev.filter((r) => r._id !== row._id));
+    try {
+      await api.delete(`/returns/${row._id}`);
+      emitDataSync({ type: "return", action: "delete", id: row._id });
+    } catch (err) {
+      console.error("Failed to delete return:", err);
+      fetchReturns().then((data) => setReturns(data));
+      setToast(err.response?.data?.message || "Failed to delete return");
+    }
   };
 
   const handleEdit = (row) => {
@@ -170,10 +206,13 @@ const ReturnManagePage = () => {
 
   const handleSaveEdit = async (form) => {
     try {
-      await api.put(`/returns/${form._id}`, form);
+      const res = await api.put(`/returns/${form._id}`, form);
+      const updated = res.data?.data || form;
+      // Immediately update row in table without reload
+      setReturns((prev) => prev.map((r) => (r._id === form._id ? { ...r, ...updated } : r)));
       setToast("Return updated successfully!");
-      handleRefresh();
-      setTimeout(() => setEditRow(null), 500);
+      setEditRow(null);
+      emitDataSync({ type: "return", action: "update", record: updated });
     } catch (error) {
       setToast(error.response?.data?.message || "Failed to update return");
     }
@@ -235,7 +274,8 @@ const ReturnManagePage = () => {
       } catch (_) {}
     }
     setToast(`Processed CSV return records`);
-    handleRefresh();
+    emitDataSync({ type: "return", action: "bulk" });
+    fetchReturns().then((data) => setReturns(data));
   };
 
   return (

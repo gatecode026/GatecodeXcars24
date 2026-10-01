@@ -2,7 +2,7 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { api, toAbsoluteAssetUrl } from "../api/client";
+import { api, toAbsoluteAssetUrl, emitDataSync, onDataSync } from "../api/client";
 import Toast from "../components/Toast";
 import CsvImportModal from "../components/CsvImportModal";
 import { exportTableToCsv } from "../utils/csvHelper";
@@ -187,7 +187,7 @@ const EmployeeOrderPage = () => {
   const fetchRecent = useCallback(async (isBackground = false) => {
     try {
       if (!isBackground) setInitialLoading(true);
-      const res = await api.get("/employee/orders");
+      const res = await api.get("/employee/orders", { forceRefresh: isBackground });
       setRecentOrders(res.data?.data || []);
     } catch {
       // silent
@@ -203,9 +203,17 @@ const EmployeeOrderPage = () => {
     }, 8000);
     const onFocus = () => fetchRecent(true);
     window.addEventListener("focus", onFocus);
+
+    const unsub = onDataSync((evt) => {
+      if (evt?.type === "order") {
+        fetchRecent(true);
+      }
+    });
+
     return () => {
       clearInterval(interval);
       window.removeEventListener("focus", onFocus);
+      unsub();
     };
   }, [fetchRecent]);
 
@@ -385,11 +393,15 @@ const EmployeeOrderPage = () => {
 
   const handleDeleteOrder = async (order) => {
     if (!window.confirm(`Delete order for "${order.customerName}"? This cannot be undone.`)) return;
+    // Immediately remove from state without reload
+    setRecentOrders((prev) => prev.filter((o) => o._id !== order._id));
     try {
       await api.delete(`/employee/orders/${order._id}`);
       setToast("Order deleted successfully!");
+      emitDataSync({ type: "order", action: "delete", id: order._id });
       fetchRecent(true);
     } catch {
+      fetchRecent(true);
       setToast("Failed to delete order");
     }
   };
@@ -442,6 +454,7 @@ const EmployeeOrderPage = () => {
   const handleImportOrders = async (rows) => {
     const res = await api.post("/orders/bulk-import", { rows });
     setToast(res.data?.message || `Imported ${rows.length} orders successfully!`);
+    emitDataSync({ type: "order", action: "bulk" });
     fetchRecent(true);
   };
 
@@ -475,7 +488,7 @@ const EmployeeOrderPage = () => {
       if (paymentFile) payload.append("paymentScreenshot", paymentFile);
 
       if (editingId) {
-        await api.put(`/employee/orders/${editingId}`, {
+        const res = await api.put(`/employee/orders/${editingId}`, {
           customerName: form.customerName,
           mobileNumber: form.mobileNumber,
           alternateMobileNumber: form.alternateMobileNumber,
@@ -499,10 +512,20 @@ const EmployeeOrderPage = () => {
           bankName: form.bankName,
           orderStatus: form.orderStatus,
         });
+        const updated = res.data?.data;
+        if (updated) {
+          setRecentOrders((prev) => prev.map((o) => (o._id === editingId ? { ...o, ...updated } : o)));
+        }
         setToast("Order updated successfully!");
+        emitDataSync({ type: "order", action: "update", record: updated });
       } else {
-        await api.post("/orders", payload);
+        const res = await api.post("/orders", payload);
+        const created = res.data?.data;
+        if (created) {
+          setRecentOrders((prev) => [created, ...prev.filter((o) => o._id !== created._id)]);
+        }
         setToast("Order submitted successfully!");
+        emitDataSync({ type: "order", action: "create", record: created });
       }
       setForm(initialState);
       setEditingId(null);

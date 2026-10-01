@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { api } from "../api/client";
+import { api, emitDataSync, onDataSync } from "../api/client";
 import DataTable from "../components/DataTable";
 import { exportTableToCsv } from "../utils/csvHelper";
 
@@ -48,7 +48,7 @@ const columns = [
 ];
 
 const fetchReturns = async () => {
-  const res = await api.get("/returns");
+  const res = await api.get("/returns", { forceRefresh: true });
   if (!res.data?.data) return [];
   return res.data.data;
 };
@@ -73,6 +73,22 @@ const ReturnHistoryPage = () => {
     return () => { mounted = false; };
   }, []);
 
+  // Multi-tab real-time sync
+  useEffect(() => {
+    const unsub = onDataSync((evt) => {
+      if (evt?.type === "return") {
+        fetchReturns().then((data) => setReturns(data)).catch(() => {});
+      }
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const onFocus = () => fetchReturns().then((data) => setReturns(data)).catch(() => {});
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
   const handleRefresh = () => {
     setLoading(true);
     fetchReturns().then((data) => { setReturns(data); setLoading(false); }).catch((e) => { setLoading(false); console.error("Failed to refresh return history:", e); });
@@ -80,8 +96,14 @@ const ReturnHistoryPage = () => {
 
   const handleDelete = async (row) => {
     if (!window.confirm(`Delete return request for "${row.customerName}"? This cannot be undone.`)) return;
-    await api.delete(`/returns/${row._id}`);
-    handleRefresh();
+    setReturns((prev) => prev.filter((r) => r._id !== row._id));
+    try {
+      await api.delete(`/returns/${row._id}`);
+      emitDataSync({ type: "return", action: "delete", id: row._id });
+    } catch (err) {
+      console.error("Failed to delete return:", err);
+      fetchReturns().then((data) => setReturns(data));
+    }
   };
 
   const filteredReturns = returns.filter((r) => {

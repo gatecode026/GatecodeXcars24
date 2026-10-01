@@ -1,6 +1,7 @@
 import { ensureDB } from "../config/db.js";
 import { Order } from "../models/Order.js";
 import { recordActivity } from "./activityController.js";
+import { invalidateDashboardCache } from "./dashboardController.js";
 
 export const createOrder = async (req, res, next) => {
   try {
@@ -17,8 +18,20 @@ export const createOrder = async (req, res, next) => {
       return res.status(400).json({ message: "Advance amount cannot exceed total amount" });
     }
 
-    const employeeId = req.user?._id || req.user?.id || null;
-    const employeeName = req.user?.name || "";
+    const isPrivileged = ["superadmin", "admin", "manager", "tl"].includes(req.user?.role);
+    let employeeId = req.user?._id || req.user?.id || null;
+    let employeeName = req.user?.name || "";
+
+    if (isPrivileged && req.body.employeeId && String(req.body.employeeId) !== String(employeeId)) {
+      try {
+        const User = (await import("../models/User.js")).User;
+        const targetUser = await User.findById(req.body.employeeId).select("_id name").lean();
+        if (targetUser) {
+          employeeId = targetUser._id;
+          employeeName = targetUser.name;
+        }
+      } catch (_) {}
+    }
 
     const payload = {
       ...req.body,
@@ -50,6 +63,7 @@ export const createOrder = async (req, res, next) => {
       metadata: { orderId: order._id, totalAmount: order.totalAmount }
     }).catch(() => {});
 
+    invalidateDashboardCache();
     return res.status(201).json({ message: "Order created successfully", data: order });
   } catch (error) {
     return next(error);
@@ -106,6 +120,7 @@ export const updateOrder = async (req, res, next) => {
       metadata: { orderId: order._id }
     }).catch(() => {});
 
+    invalidateDashboardCache();
     return res.status(200).json({ message: "Order updated successfully", data: order });
   } catch (error) {
     return next(error);
@@ -126,6 +141,7 @@ export const updateParcelStatus = async (req, res, next) => {
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
+    invalidateDashboardCache();
     return res.status(200).json({ message: "Parcel status updated", data: order });
   } catch (error) {
     return next(error);
@@ -158,6 +174,7 @@ export const deleteOrder = async (req, res, next) => {
       metadata: { orderId: order._id }
     }).catch(() => {});
 
+    invalidateDashboardCache();
     return res.status(200).json({ message: "Order deleted successfully" });
   } catch (error) {
     return next(error);
@@ -178,6 +195,7 @@ export const updateOrderStatus = async (req, res, next) => {
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
+    invalidateDashboardCache();
     return res.status(200).json({ message: "Order status updated", data: order });
   } catch (error) {
     return next(error);
@@ -292,6 +310,7 @@ export const bulkImportOrders = async (req, res, next) => {
       }
     }
 
+    invalidateDashboardCache();
     return res.status(200).json({
       message: `Successfully imported ${insertedCount} order(s).`,
       count: insertedCount,

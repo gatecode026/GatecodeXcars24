@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { api } from "../api/client";
+import { api, onDataSync } from "../api/client";
 
 const UsersIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -118,9 +118,14 @@ const EmployeeDashboardPage = () => {
     const onFocus = () => load(filter, startDate, endDate, true);
     window.addEventListener("focus", onFocus);
 
+    const unsub = onDataSync(() => {
+      load(filter, startDate, endDate, true);
+    });
+
     return () => {
       clearInterval(interval);
       window.removeEventListener("focus", onFocus);
+      unsub();
     };
   }, [filter, startDate, endDate, load]);
 

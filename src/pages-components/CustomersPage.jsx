@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { api } from "../api/client";
+import { api, emitDataSync, onDataSync } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import Toast from "../components/Toast";
 import CsvImportModal from "../components/CsvImportModal";
@@ -310,7 +310,8 @@ const CustomersPage = ({ defaultTab = "all" }) => {
   const handleImportCustomers = async (rows) => {
     const res = await api.post("/customers/bulk-import", { rows });
     setToast({ message: res.data?.message || `Imported ${rows.length} leads successfully!`, type: "success" });
-    fetchLeads();
+    emitDataSync({ type: "customer", action: "bulk" });
+    fetchLeads({ silent: false });
   };
 
   const slideTable = (direction) => {
@@ -322,8 +323,9 @@ const CustomersPage = ({ defaultTab = "all" }) => {
 
   const [employeesList, setEmployeesList] = useState([]);
 
-  const fetchLeads = useCallback(async () => {
-    setLoading(true);
+  const fetchLeads = useCallback(async (options = {}) => {
+    const isSilent = options?.silent === true;
+    if (!isSilent) setLoading(true);
     try {
       const params = {};
       if (dateType !== "createdAt") params.dateType = dateType;
@@ -337,16 +339,33 @@ const CustomersPage = ({ defaultTab = "all" }) => {
       if (statusFilter) params.verificationStatus = statusFilter;
       if (leadByFilter) params.leadBy = leadByFilter;
       if (searchDebounced.trim()) params.search = searchDebounced.trim();
-      const res = await api.get("/customers", { params });
+      const res = await api.get("/customers", { params, forceRefresh: isSilent });
       setLeads(res.data?.data || []);
-      setCurrentPage(1);
+      if (!isSilent) setCurrentPage(1);
     } catch (err) {
       console.error("Failed to load customer leads:", err);
-      setToast({ message: "Failed to load leads from server", type: "error" });
+      if (!isSilent) setToast({ message: "Failed to load leads from server", type: "error" });
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   }, [dateType, period, fromDate, toDate, statusFilter, leadByFilter, searchDebounced]);
+
+  // Subscribe to real-time sync across components and open browser tabs
+  useEffect(() => {
+    const unsub = onDataSync((evt) => {
+      if (evt?.type === "customer") {
+        fetchLeads({ silent: true });
+      }
+    });
+    return unsub;
+  }, [fetchLeads]);
+
+  // Re-sync on window focus
+  useEffect(() => {
+    const onFocus = () => fetchLeads({ silent: true });
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [fetchLeads]);
 
   useEffect(() => {
     const isModalOpen = Boolean(showAddModal || editLead || activeDrawer);
@@ -497,15 +516,25 @@ const CustomersPage = ({ defaultTab = "all" }) => {
       };
 
       if (editLead) {
-        await api.put(`/customers/${editLead._id}`, payload);
+        const res = await api.put(`/customers/${editLead._id}`, payload);
+        const updatedLead = res.data?.data || { ...editLead, ...payload };
+        // Immediately update row in table without reload
+        setLeads((prev) => prev.map((l) => (l._id === editLead._id ? { ...l, ...updatedLead } : l)));
         setToast({ message: `Lead ${editLead.appointmentId} updated successfully!`, type: "success" });
         setEditLead(null);
+        emitDataSync({ type: "customer", action: "update", record: updatedLead });
       } else {
-        await api.post("/customers", payload);
+        const res = await api.post("/customers", payload);
+        const createdLead = res.data?.data;
+        if (createdLead) {
+          // Immediately prepend new row without reload, deduplicating by _id
+          setLeads((prev) => [createdLead, ...prev.filter((l) => l._id !== createdLead._id)]);
+        }
         setToast({ message: "New Lead & Appointment created successfully!", type: "success" });
         setShowAddModal(false);
+        emitDataSync({ type: "customer", action: "create", record: createdLead });
       }
-      fetchLeads();
+      fetchLeads({ silent: true });
     } catch (err) {
       const msg = err.response?.data?.message || "Failed to save lead";
       setToast({ message: msg, type: "error" });
@@ -524,16 +553,24 @@ const CustomersPage = ({ defaultTab = "all" }) => {
       return;
     }
     try {
+      // Immediately remove record from table without reload
+      setLeads((prev) => prev.filter((l) => l._id !== id));
       await api.delete(`/customers/${id}`);
       setToast({ message: `Lead ${aptId || ""} deleted successfully`, type: "success" });
-      fetchLeads();
+      emitDataSync({ type: "customer", action: "delete", id });
+      fetchLeads({ silent: true });
     } catch (err) {
+      fetchLeads({ silent: true });
       setToast({ message: err.response?.data?.message || "Failed to delete lead", type: "error" });
     }
   };
 
   const handleRowStatusChange = async (lead, newStatus) => {
     const isVerified = newStatus === "Verified";
+    const previousStatus = lead.verificationStatus;
+    const previousVerified = lead.verified;
+    const previousLeadStatus = lead.leadStatus;
+
     // 1. Immediate optimistic UI update so the select updates smoothly without freezing
     setLeads((prev) =>
       prev.map((l) =>
@@ -549,14 +586,33 @@ const CustomersPage = ({ defaultTab = "all" }) => {
     );
 
     try {
-      await api.put(`/customers/${lead._id}`, {
+      const res = await api.put(`/customers/${lead._id}`, {
         verificationStatus: newStatus,
         verified: isVerified
       });
+      const updated = res.data?.data;
+      if (updated) {
+        setLeads((prev) => prev.map((l) => (l._id === lead._id ? { ...l, ...updated } : l)));
+      }
       setToast({ message: `Marked as ${newStatus === "Verified" ? "Yes (Verified)" : "No (Pending)"}`, type: "success" });
+      emitDataSync({ type: "customer", action: "update", record: updated || { ...lead, verificationStatus: newStatus } });
+      fetchLeads({ silent: true });
     } catch (err) {
       console.error("Failed to update status:", err);
-      fetchLeads();
+      // Rollback on failure
+      setLeads((prev) =>
+        prev.map((l) =>
+          l._id === lead._id
+            ? {
+                ...l,
+                verificationStatus: previousStatus,
+                verified: previousVerified,
+                leadStatus: previousLeadStatus
+              }
+            : l
+        )
+      );
+      fetchLeads({ silent: true });
       setToast({ message: err.response?.data?.message || "Failed to update status", type: "error" });
     }
   };

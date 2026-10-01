@@ -121,7 +121,10 @@ export async function runHandler(request, params = {}, middlewares = [], control
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept"
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept",
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+      "Pragma": "no-cache",
+      "Expires": "0"
     };
     let responseBody = null;
     let resolved = false;

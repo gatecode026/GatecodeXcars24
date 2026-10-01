@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
-import { api } from "../api/client";
+import { api, onDataSync } from "../api/client";
 import GlobalFilterBar from "../components/dashboard/GlobalFilterBar";
 import PerformanceKpiGrid from "../components/dashboard/PerformanceKpiGrid";
 import LeaderboardTable from "../components/dashboard/LeaderboardTable";
@@ -74,21 +74,37 @@ export default function AdminDashboardPage() {
     setBonus(res.data?.data);
   }, [buildQuery]);
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
+  const fetchAll = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       await Promise.all([fetchRankings(), fetchBonus(), fetchSettings()]);
     } catch (err) {
       console.error("Error fetching dashboard data:", err);
-      setError(err.response?.data?.message || "Failed to load dashboard metrics from server.");
+      if (!silent) setError(err.response?.data?.message || "Failed to load dashboard metrics from server.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [fetchRankings, fetchBonus, fetchSettings]);
 
   useEffect(() => {
     fetchAll();
+  }, [fetchAll]);
+
+  // Real-time synchronization across dashboard components and multi-tab browser sessions
+  useEffect(() => {
+    const unsub = onDataSync((evt) => {
+      // Re-fetch dashboard KPIs, rankings, charts immediately whenever relevant data changes
+      fetchAll(true);
+    });
+    return unsub;
+  }, [fetchAll]);
+
+  // Window focus listener ensures fresh data when user returns to dashboard tab
+  useEffect(() => {
+    const onFocus = () => fetchAll(true);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [fetchAll]);
 
   const handleFilterChange = (updates) => {

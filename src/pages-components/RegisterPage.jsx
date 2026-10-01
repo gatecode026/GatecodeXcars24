@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { api, emitDataSync } from "../api/client";
 
 // Clean UI Icons
 const EyeIcon = () => (
@@ -122,12 +122,14 @@ const RegisterPage = () => {
         if (!payload.password) delete payload.password;
         if (!payload.username) delete payload.username;
         await api.put(`/auth/users/${id}`, payload);
+        emitDataSync({ type: "user", action: "update", id });
         alert("User updated successfully!");
         navigate("/admin/users");
       } else {
         const payload = { ...form };
         if (!payload.username) delete payload.username;
-        await api.post("/auth/register", payload);
+        const res = await api.post("/auth/register", payload);
+        emitDataSync({ type: "user", action: "create", record: res?.data?.data });
         alert("Employee registered successfully!");
         navigate("/admin/users");
       }
