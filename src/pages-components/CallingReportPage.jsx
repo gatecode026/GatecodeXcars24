@@ -383,8 +383,8 @@ const CallingReportPage = () => {
         if (endDate) params.endDate = endDate;
       }
 
-      const res = await api.get("/calling-records", { params, forceRefresh: silent });
-      setRecords(res.data.data || []);
+      const res = await api.get("/calling-records", { params, forceRefresh: Boolean(options?.force) });
+      setRecords(res.data?.data || []);
     } catch {
       setRecords([]);
     } finally {

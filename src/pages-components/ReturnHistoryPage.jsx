@@ -47,8 +47,8 @@ const columns = [
   { key: "returnStatus", label: "Status", render: (row) => statusBadge(row.returnStatus) },
 ];
 
-const fetchReturns = async () => {
-  const res = await api.get("/returns", { forceRefresh: true });
+const fetchReturns = async (force = false) => {
+  const res = await api.get("/returns", force ? { forceRefresh: true } : {});
   if (!res.data?.data) return [];
   return res.data.data;
 };
@@ -68,8 +68,17 @@ const ReturnHistoryPage = () => {
 
   useEffect(() => {
     let mounted = true;
-    setLoading(true);
-    fetchReturns().then((data) => { if (mounted) { setReturns(data); setLoading(false); } }).catch((e) => { if (mounted) { setLoading(false); console.error("Failed to load return history:", e); } });
+    fetchReturns(false).then((data) => {
+      if (mounted) {
+        setReturns(data);
+        setLoading(false);
+      }
+    }).catch((e) => {
+      if (mounted) {
+        setLoading(false);
+        console.error("Failed to load return history:", e);
+      }
+    });
     return () => { mounted = false; };
   }, []);
 
@@ -77,21 +86,20 @@ const ReturnHistoryPage = () => {
   useEffect(() => {
     const unsub = onDataSync((evt) => {
       if (evt?.type === "return") {
-        fetchReturns().then((data) => setReturns(data)).catch(() => {});
+        fetchReturns(true).then((data) => setReturns(data)).catch(() => {});
       }
     });
     return unsub;
   }, []);
 
   useEffect(() => {
-    const onFocus = () => fetchReturns().then((data) => setReturns(data)).catch(() => {});
+    const onFocus = () => fetchReturns(false).then((data) => setReturns(data)).catch(() => {});
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, []);
 
   const handleRefresh = () => {
-    setLoading(true);
-    fetchReturns().then((data) => { setReturns(data); setLoading(false); }).catch((e) => { setLoading(false); console.error("Failed to refresh return history:", e); });
+    fetchReturns(true).then((data) => { setReturns(data); }).catch((e) => { console.error("Failed to refresh return history:", e); });
   };
 
   const handleDelete = async (row) => {

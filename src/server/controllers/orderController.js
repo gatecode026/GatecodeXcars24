@@ -2,6 +2,9 @@ import { ensureDB } from "../config/db.js";
 import { Order } from "../models/Order.js";
 import { recordActivity } from "./activityController.js";
 import { invalidateDashboardCache } from "./dashboardController.js";
+import { createMicroCache } from "../cache/serverCache.js";
+
+const orderTableCache = createMicroCache("orders", 8000);
 
 export const createOrder = async (req, res, next) => {
   try {
@@ -74,9 +77,24 @@ export const getOrders = async (req, res, next) => {
   try {
     const dbReady = await ensureDB();
     if (!dbReady) {
-      
+      return res.status(200).json({ data: [] });
     }
-    const orders = await Order.find().sort({ createdAt: -1 }).lean();
+
+    const userId = req.user?._id || req.user?.id || "anon";
+    const cacheKey = `${String(userId)}_${JSON.stringify(req.query || {})}`;
+    const cached = orderTableCache.get(cacheKey);
+    if (cached) {
+      return res.status(200).json({ data: cached });
+    }
+
+    const filter = {};
+    if (req.user?.role === "employee") {
+      filter.employeeId = req.user._id;
+    }
+
+    const orders = await Order.find(filter).sort({ createdAt: -1 }).lean();
+    orderTableCache.set(cacheKey, orders);
+
     return res.status(200).json({ data: orders });
   } catch (error) {
     return next(error);

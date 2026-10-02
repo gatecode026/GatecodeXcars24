@@ -2,6 +2,9 @@ import { ensureDB } from "../config/db.js";
 import { ReturnRequest } from "../models/ReturnRequest.js";
 import { recordActivity } from "./activityController.js";
 import { invalidateDashboardCache } from "./dashboardController.js";
+import { createMicroCache } from "../cache/serverCache.js";
+
+const returnTableCache = createMicroCache("returns", 8000);
 
 export const createReturnRequest = async (req, res, next) => {
   try {
@@ -58,9 +61,24 @@ export const getReturnRequests = async (req, res, next) => {
   try {
     const dbReady = await ensureDB();
     if (!dbReady) {
-      
+      return res.status(200).json({ data: [] });
     }
-    const requests = await ReturnRequest.find().sort({ createdAt: -1 }).lean();
+
+    const userId = req.user?._id || req.user?.id || "anon";
+    const cacheKey = `${String(userId)}_${JSON.stringify(req.query || {})}`;
+    const cached = returnTableCache.get(cacheKey);
+    if (cached) {
+      return res.status(200).json({ data: cached });
+    }
+
+    const filter = {};
+    if (req.user?.role === "employee") {
+      filter.employeeId = req.user._id;
+    }
+
+    const requests = await ReturnRequest.find(filter).sort({ createdAt: -1 }).lean();
+    returnTableCache.set(cacheKey, requests);
+
     return res.status(200).json({ data: requests });
   } catch (error) {
     return next(error);

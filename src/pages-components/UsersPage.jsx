@@ -100,17 +100,18 @@ const UsersPage = () => {
     exportTableToCsv(`Team_Members_${new Date().toISOString().split("T")[0]}.csv`, headers, rows);
   };
 
-  const fetchUsers = useCallback(async () => {
+  const fetchUsers = useCallback(async (options = {}) => {
+    const isSilent = options?.silent === true || (users && users.length > 0 && !options?.force);
     try {
-      setLoading(true);
-      const res = await api.get("/auth/users", { forceRefresh: true });
-      setUsers(res.data.data || []);
+      if (!isSilent) setLoading(true);
+      const res = await api.get("/auth/users", options?.force ? { forceRefresh: true } : {});
+      setUsers(res.data?.data || []);
     } catch {
-      setUsers([]);
+      if (!isSilent) setUsers([]);
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
-  }, []);
+  }, [users]);
 
   useEffect(() => {
     fetchUsers();

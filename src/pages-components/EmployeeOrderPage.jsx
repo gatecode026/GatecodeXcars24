@@ -186,10 +186,10 @@ const EmployeeOrderPage = () => {
   const [dateFilter, setDateFilter] = useState("today");
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
 
-  const fetchRecent = useCallback(async (isBackground = false) => {
+  const fetchRecent = useCallback(async (isBackground = false, force = false) => {
     try {
       if (!isBackground) setInitialLoading(true);
-      const res = await api.get("/employee/orders", { forceRefresh: isBackground });
+      const res = await api.get("/employee/orders", force ? { forceRefresh: true } : {});
       setRecentOrders(res.data?.data || []);
     } catch {
       // silent
@@ -208,7 +208,7 @@ const EmployeeOrderPage = () => {
 
     const unsub = onDataSync((evt) => {
       if (evt?.type === "order") {
-        fetchRecent(true);
+        fetchRecent(true, true);
       }
     });
 

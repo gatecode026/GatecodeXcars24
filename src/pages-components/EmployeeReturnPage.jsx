@@ -167,10 +167,10 @@ const EmployeeReturnPage = () => {
   const [dateFilter, setDateFilter] = useState("today");
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
 
-  const fetchRecent = useCallback(async (isBackground = false) => {
+  const fetchRecent = useCallback(async (isBackground = false, force = false) => {
     try {
       if (!isBackground) setInitialLoading(true);
-      const res = await api.get("/employee/returns", { forceRefresh: isBackground });
+      const res = await api.get("/employee/returns", force ? { forceRefresh: true } : {});
       setRecentReturns(res.data?.data || []);
     } catch {
       // silent
@@ -190,7 +190,7 @@ const EmployeeReturnPage = () => {
 
     const unsub = onDataSync((evt) => {
       if (evt?.type === "return") {
-        fetchRecent(true);
+        fetchRecent(true, true);
       }
     });
 

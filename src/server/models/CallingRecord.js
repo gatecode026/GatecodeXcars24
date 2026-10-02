@@ -27,6 +27,8 @@ callingRecordSchema.virtual("totalCallsDone").get(function () {
 callingRecordSchema.set("toJSON", { virtuals: true });
 callingRecordSchema.set("toObject", { virtuals: true });
 
-callingRecordSchema.index({ employeeId: 1, date: -1 });
+callingRecordSchema.index({ employeeId: 1, date: -1, createdAt: -1 });
+callingRecordSchema.index({ date: -1, createdAt: -1 });
+callingRecordSchema.index({ createdAt: -1 });
 
 export const CallingRecord = mongoose.models.CallingRecord || mongoose.model("CallingRecord", callingRecordSchema);

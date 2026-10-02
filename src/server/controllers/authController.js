@@ -5,6 +5,9 @@ import { User } from "../models/User.js";
 import { Customer } from "../models/Customer.js";
 import { recordActivity } from "./activityController.js";
 import { invalidateEmployeesListCache } from "./customerController.js";
+import { createMicroCache } from "../cache/serverCache.js";
+
+const usersTableCache = createMicroCache("users", 10000);
 
 const getFixedAdminUser = () => ({
   id: "admin-fallback",
@@ -131,8 +134,14 @@ export const getUsers = async (req, res, next) => {
     }
 
     // Critical Security: The Employee table must only list subordinate employees, never administrators or the logged-in user
-    const currentUserId = req.user?._id || req.user?.id;
+    const currentUserId = req.user?._id || req.user?.id || "anon";
     const currentUserEmail = (req.user?.email || "").toLowerCase();
+    const cacheKey = `${String(currentUserId)}_${JSON.stringify(req.query || {})}`;
+
+    const cached = usersTableCache.get(cacheKey);
+    if (cached) {
+      return res.status(200).json({ data: cached });
+    }
 
     const query = {
       role: { $ne: "admin" },
@@ -147,6 +156,7 @@ export const getUsers = async (req, res, next) => {
     }
 
     const users = await User.find(query, { password: 0 }).sort({ createdAt: -1 }).lean();
+    usersTableCache.set(cacheKey, users);
     return res.status(200).json({ data: users });
   } catch (error) {
     return next(error);

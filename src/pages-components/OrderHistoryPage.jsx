@@ -75,8 +75,8 @@ const columns = [
   { key: "courierCompany", label: "Courier", render: (row) => row.courierCompany || "-" },
 ];
 
-const fetchOrders = async () => {
-  const res = await api.get("/orders", { forceRefresh: true });
+const fetchOrders = async (force = false) => {
+  const res = await api.get("/orders", force ? { forceRefresh: true } : {});
   if (!res.data?.data) return [];
   return res.data.data;
 };
@@ -96,8 +96,17 @@ const OrderHistoryPage = () => {
 
   useEffect(() => {
     let mounted = true;
-    setLoading(true);
-    fetchOrders().then((data) => { if (mounted) { setOrders(data); setLoading(false); } }).catch((e) => { if (mounted) { setLoading(false); console.error("Failed to load order history:", e); } });
+    fetchOrders(false).then((data) => {
+      if (mounted) {
+        setOrders(data);
+        setLoading(false);
+      }
+    }).catch((e) => {
+      if (mounted) {
+        setLoading(false);
+        console.error("Failed to load order history:", e);
+      }
+    });
     return () => { mounted = false; };
   }, []);
 
@@ -105,21 +114,20 @@ const OrderHistoryPage = () => {
   useEffect(() => {
     const unsub = onDataSync((evt) => {
       if (evt?.type === "order") {
-        fetchOrders().then((data) => setOrders(data)).catch(() => {});
+        fetchOrders(true).then((data) => setOrders(data)).catch(() => {});
       }
     });
     return unsub;
   }, []);
 
   useEffect(() => {
-    const onFocus = () => fetchOrders().then((data) => setOrders(data)).catch(() => {});
+    const onFocus = () => fetchOrders(false).then((data) => setOrders(data)).catch(() => {});
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, []);
 
   const handleRefresh = () => {
-    setLoading(true);
-    fetchOrders().then((data) => { setOrders(data); setLoading(false); }).catch((e) => { setLoading(false); console.error("Failed to refresh order history:", e); });
+    fetchOrders(true).then((data) => { setOrders(data); }).catch((e) => { console.error("Failed to refresh order history:", e); });
   };
 
   const handleDelete = async (row) => {

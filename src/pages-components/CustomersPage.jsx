@@ -449,7 +449,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
   const [employeesList, setEmployeesList] = useState([]);
 
   const fetchLeads = useCallback(async (options = {}) => {
-    const isSilent = options?.silent === true;
+    const isSilent = options?.silent === true || (leads && leads.length > 0 && !options?.force);
     if (!isSilent) setLoading(true);
     try {
       const params = {};
@@ -464,7 +464,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
       if (statusFilter) params.verificationStatus = statusFilter;
       if (leadByFilter) params.leadBy = leadByFilter;
       if (searchDebounced.trim()) params.search = searchDebounced.trim();
-      const res = await api.get("/customers", { params, forceRefresh: isSilent });
+      const res = await api.get("/customers", { params, forceRefresh: options?.force === true });
       setLeads(res.data?.data || []);
       if (!isSilent) setCurrentPage(1);
     } catch (err) {
@@ -473,7 +473,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
     } finally {
       if (!isSilent) setLoading(false);
     }
-  }, [dateType, period, fromDate, toDate, statusFilter, leadByFilter, searchDebounced]);
+  }, [dateType, period, fromDate, toDate, statusFilter, leadByFilter, searchDebounced, leads?.length]);
 
   // Subscribe to real-time sync across components and open browser tabs
   useEffect(() => {

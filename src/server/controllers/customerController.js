@@ -6,6 +6,9 @@ import { recordActivity } from "./activityController.js";
 import { sendTLWhatsAppNotification } from "../services/whatsappNotificationService.js";
 import { can } from "../services/authorizationService.js";
 import { invalidateDashboardCache } from "./dashboardController.js";
+import { createMicroCache } from "../cache/serverCache.js";
+
+const customerTableCache = createMicroCache("customers", 8000);
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -177,19 +180,30 @@ export const getCustomers = async (req, res, next) => {
       return res.status(200).json({ data: [] });
     }
 
+    const userId = req.user?._id || req.user?.id || "anon";
+    const userRole = req.user?.role || "employee";
+    const cacheKey = `${String(userId)}_${userRole}_${JSON.stringify(req.query || {})}`;
+
+    const cached = customerTableCache.get(cacheKey);
+    if (cached) {
+      return res.status(200).json({ data: cached });
+    }
+
     const filter = buildCustomerFilter(req);
     const limit = Math.min(parseInt(req.query.limit) || 500, 1000);
     const skip = parseInt(req.query.skip) || 0;
 
     const customers = await Customer.find(filter)
       .select("-__v")
-      .populate("assignedTo", "name email")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .lean();
 
-    return res.status(200).json({ data: customers.map(normalizeCustomer) });
+    const normalized = customers.map(normalizeCustomer);
+    customerTableCache.set(cacheKey, normalized);
+
+    return res.status(200).json({ data: normalized });
   } catch (error) {
     return next(error);
   }

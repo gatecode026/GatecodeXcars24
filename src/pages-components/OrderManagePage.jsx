@@ -84,8 +84,8 @@ const orderEditFields = [
 
 const parcelStatusOptions = ["Pending", "Process", "Parcel", "Packed", "Dispatched", "Delivered"];
 
-const fetchOrders = async () => {
-  const res = await api.get("/orders", { forceRefresh: true });
+const fetchOrders = async (force = false) => {
+  const res = await api.get("/orders", force ? { forceRefresh: true } : {});
   if (!res.data?.data) return [];
   return res.data.data;
 };
@@ -157,8 +157,17 @@ const OrderManagePage = () => {
 
   useEffect(() => {
     let mounted = true;
-    setLoading(true);
-    fetchOrders().then((data) => { if (mounted) { setOrders(data); setLoading(false); } }).catch((e) => { if (mounted) { setLoading(false); console.error("Failed to load orders:", e); } });
+    fetchOrders().then((data) => {
+      if (mounted) {
+        setOrders(data);
+        setLoading(false);
+      }
+    }).catch((e) => {
+      if (mounted) {
+        setLoading(false);
+        console.error("Failed to load orders:", e);
+      }
+    });
     return () => { mounted = false; };
   }, []);
 
@@ -180,7 +189,7 @@ const OrderManagePage = () => {
 
   const handleRefresh = useCallback(() => {
     setLoading(true);
-    fetchOrders().then((data) => { setOrders(data); setLoading(false); }).catch((e) => { setLoading(false); console.error("Failed to refresh orders:", e); });
+    fetchOrders(true).then((data) => { setOrders(data); setLoading(false); }).catch((e) => { setLoading(false); console.error("Failed to refresh orders:", e); });
   }, []);
 
   const updateOrderStatus = async (id, status) => {

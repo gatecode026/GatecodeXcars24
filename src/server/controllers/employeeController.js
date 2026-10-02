@@ -4,6 +4,7 @@ import { ReturnRequest } from "../models/ReturnRequest.js";
 import { CallingRecord } from "../models/CallingRecord.js";
 import { Customer } from "../models/Customer.js";
 import { invalidateDashboardCache } from "./dashboardController.js";
+import { createMicroCache } from "../cache/serverCache.js";
 
 const startOfDay = () => {
   const d = new Date();
@@ -79,12 +80,17 @@ const getDateRange = (filter, startDate, endDate) => {
   return { start, end };
 };
 
-// Micro-cache (8s) for employee dashboard to eliminate document latency & TTFB
-const employeeDashboardCache = new Map();
-const EMPLOYEE_DASHBOARD_CACHE_TTL = 8000;
+// Micro-caches for employee endpoints to eliminate repeated queries and TTFB latency
+const employeeDashboardCache = createMicroCache("employeeDashboard", 8000);
+const employeeOrdersCache = createMicroCache("employeeOrders", 10000);
+const employeeReturnsCache = createMicroCache("employeeReturns", 10000);
+const employeeCallingCache = createMicroCache("employeeCalling", 10000);
 
 export const invalidateEmployeeDashboardCache = () => {
   employeeDashboardCache.clear();
+  employeeOrdersCache.clear();
+  employeeReturnsCache.clear();
+  employeeCallingCache.clear();
 };
 
 export const getEmployeeDashboard = async (req, res, next) => {
@@ -113,8 +119,8 @@ export const getEmployeeDashboard = async (req, res, next) => {
     // Check micro-cache for instant response (<2ms)
     const cacheKey = `${String(employeeId)}_${filter}_${startDate || ''}_${endDate || ''}`;
     const cached = employeeDashboardCache.get(cacheKey);
-    if (cached && (Date.now() - cached.timestamp < EMPLOYEE_DASHBOARD_CACHE_TTL)) {
-      return res.status(200).json({ data: cached.data });
+    if (cached) {
+      return res.status(200).json({ data: cached });
     }
 
     const { start, end } = getDateRange(filter, startDate, endDate);
@@ -196,7 +202,7 @@ export const getEmployeeDashboard = async (req, res, next) => {
     };
 
     // Store in micro-cache
-    employeeDashboardCache.set(cacheKey, { timestamp: Date.now(), data: responseData });
+    employeeDashboardCache.set(cacheKey, responseData);
 
     return res.status(200).json({ data: responseData });
   } catch (error) {
@@ -213,7 +219,15 @@ export const getEmployeeOrdersHistory = async (req, res, next) => {
     if (!employeeId) {
       return res.status(401).json({ message: "Employee context not found" });
     }
+
+    const cacheKey = `emp_orders_${employeeId}`;
+    const cached = employeeOrdersCache.get(cacheKey);
+    if (cached) {
+      return res.status(200).json({ data: cached, cached: true });
+    }
+
     const orders = await Order.find({ employeeId }).sort({ createdAt: -1 }).lean();
+    employeeOrdersCache.set(cacheKey, orders);
     return res.status(200).json({ data: orders });
   } catch (error) {
     return next(error);
@@ -229,7 +243,15 @@ export const getEmployeeReturnsHistory = async (req, res, next) => {
     if (!employeeId) {
       return res.status(401).json({ message: "Employee context not found" });
     }
+
+    const cacheKey = `emp_returns_${employeeId}`;
+    const cached = employeeReturnsCache.get(cacheKey);
+    if (cached) {
+      return res.status(200).json({ data: cached, cached: true });
+    }
+
     const requests = await ReturnRequest.find({ employeeId }).sort({ createdAt: -1 }).lean();
+    employeeReturnsCache.set(cacheKey, requests);
     return res.status(200).json({ data: requests });
   } catch (error) {
     return next(error);
@@ -259,6 +281,7 @@ export const updateEmployeeOrder = async (req, res, next) => {
     }
 
     await order.save();
+    invalidateDashboardCache();
     return res.status(200).json({ message: "Order updated successfully", data: order });
   } catch (error) {
     return next(error);
@@ -276,6 +299,7 @@ export const deleteEmployeeOrder = async (req, res, next) => {
     if (!order) {
       return res.status(404).json({ message: "Order not found or unauthorized" });
     }
+    invalidateDashboardCache();
     return res.status(200).json({ message: "Order deleted successfully" });
   } catch (error) {
     return next(error);
@@ -304,6 +328,7 @@ export const updateEmployeeReturn = async (req, res, next) => {
     }
 
     await request.save();
+    invalidateDashboardCache();
     return res.status(200).json({ message: "Return updated successfully", data: request });
   } catch (error) {
     return next(error);
@@ -321,6 +346,7 @@ export const deleteEmployeeReturn = async (req, res, next) => {
     if (!request) {
       return res.status(404).json({ message: "Return request not found or unauthorized" });
     }
+    invalidateDashboardCache();
     return res.status(200).json({ message: "Return request deleted successfully" });
   } catch (error) {
     return next(error);
@@ -338,12 +364,18 @@ export const getEmployeeCallingRecords = async (req, res, next) => {
     }
 
     const { filter: dateFilter = "today", startDate, endDate } = req.query;
-    const filter = { employeeId };
+    const cacheKey = `emp_calling_${employeeId}_${dateFilter}_${startDate || ""}_${endDate || ""}`;
+    const cached = employeeCallingCache.get(cacheKey);
+    if (cached) {
+      return res.status(200).json({ data: cached, cached: true });
+    }
 
+    const filter = { employeeId };
     const range = getDateRange(dateFilter, startDate, endDate);
     filter.date = { $gte: range.start, $lte: range.end };
 
     const records = await CallingRecord.find(filter).sort({ date: -1, createdAt: -1 }).lean();
+    employeeCallingCache.set(cacheKey, records);
     return res.status(200).json({ data: records });
   } catch (error) {
     return next(error);

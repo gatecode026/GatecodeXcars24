@@ -72,8 +72,8 @@ const columns = [
   { key: "returnStatus", label: "Status", render: (row) => statusBadge(row.returnStatus) },
 ];
 
-const fetchReturns = async () => {
-  const res = await api.get("/returns", { forceRefresh: true });
+const fetchReturns = async (force = false) => {
+  const res = await api.get("/returns", force ? { forceRefresh: true } : {});
   if (!res.data?.data) return [];
   return res.data.data;
 };
@@ -143,8 +143,17 @@ const ReturnManagePage = () => {
 
   useEffect(() => {
     let mounted = true;
-    setLoading(true);
-    fetchReturns().then((data) => { if (mounted) { setReturns(data); setLoading(false); } }).catch((e) => { if (mounted) { setLoading(false); console.error("Failed to load returns:", e); } });
+    fetchReturns().then((data) => {
+      if (mounted) {
+        setReturns(data);
+        setLoading(false);
+      }
+    }).catch((e) => {
+      if (mounted) {
+        setLoading(false);
+        console.error("Failed to load returns:", e);
+      }
+    });
     return () => { mounted = false; };
   }, []);
 
@@ -166,7 +175,7 @@ const ReturnManagePage = () => {
 
   const handleRefresh = useCallback(() => {
     setLoading(true);
-    fetchReturns().then((data) => { setReturns(data); setLoading(false); }).catch((e) => { setLoading(false); console.error("Failed to refresh returns:", e); });
+    fetchReturns(true).then((data) => { setReturns(data); setLoading(false); }).catch((e) => { setLoading(false); console.error("Failed to refresh returns:", e); });
   }, []);
 
   const updateReturnStatus = async (id, status) => {

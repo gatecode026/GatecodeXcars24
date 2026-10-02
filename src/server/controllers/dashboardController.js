@@ -5,12 +5,15 @@ import { User } from "../models/User.js";
 import { CallingRecord } from "../models/CallingRecord.js";
 import { ensureDB } from "../config/db.js";
 
+import { clearAllServerCaches } from "../cache/serverCache.js";
+
 // Micro-cache (5s) for instant tab switching and rapid dashboard refreshes
 const dashboardCache = new Map();
 const DASHBOARD_CACHE_TTL = 5000;
 
 export const invalidateDashboardCache = () => {
   dashboardCache.clear();
+  clearAllServerCaches();
   try {
     import("./employeeController.js").then((m) => {
       if (m && m.invalidateEmployeeDashboardCache) m.invalidateEmployeeDashboardCache();

@@ -2,12 +2,22 @@ import { ensureDB } from "../config/db.js";
 import { CallingRecord } from "../models/CallingRecord.js";
 import { User } from "../models/User.js";
 import { invalidateDashboardCache } from "./dashboardController.js";
+import { createMicroCache } from "../cache/serverCache.js";
+
+const callingTableCache = createMicroCache("calling", 8000);
 
 export const getCallingRecords = async (req, res, next) => {
   try {
     const dbReady = await ensureDB();
     if (!dbReady) {
-      return res.status(503).json({ message: "Database unavailable." });
+      return res.status(200).json({ data: [] });
+    }
+
+    const userId = req.user?._id || req.user?.id || "anon";
+    const cacheKey = `${String(userId)}_${JSON.stringify(req.query || {})}`;
+    const cached = callingTableCache.get(cacheKey);
+    if (cached) {
+      return res.status(200).json({ data: cached });
     }
 
     const { startDate, endDate, employeeId } = req.query;
@@ -15,6 +25,8 @@ export const getCallingRecords = async (req, res, next) => {
 
     if (employeeId) {
       filter.employeeId = employeeId;
+    } else if (req.user?.role === "employee") {
+      filter.employeeId = req.user._id;
     }
 
     if (startDate || endDate) {
@@ -36,6 +48,7 @@ export const getCallingRecords = async (req, res, next) => {
       .sort({ date: -1, createdAt: -1 })
       .lean();
 
+    callingTableCache.set(cacheKey, records);
     return res.status(200).json({ data: records });
   } catch (error) {
     return next(error);
