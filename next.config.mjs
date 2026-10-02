@@ -24,6 +24,7 @@ const nextConfig = {
     }
     return config;
   },
+  compress: true,
   serverExternalPackages: ["mongoose", "bcryptjs"],
   async headers() {
     return [
@@ -41,6 +42,12 @@ const nextConfig = {
         headers: [
           { key: "Access-Control-Allow-Origin", value: "*" },
           { key: "Access-Control-Allow-Methods", value: "GET,OPTIONS" }
+        ]
+      },
+      {
+        source: "/:path*.(jpg|jpeg|png|webp|svg|ico|woff2)",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" }
         ]
       }
     ];

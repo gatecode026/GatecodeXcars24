@@ -11,6 +11,11 @@ const DASHBOARD_CACHE_TTL = 5000;
 
 export const invalidateDashboardCache = () => {
   dashboardCache.clear();
+  try {
+    import("./employeeController.js").then((m) => {
+      if (m && m.invalidateEmployeeDashboardCache) m.invalidateEmployeeDashboardCache();
+    }).catch(() => {});
+  } catch (e) {}
 };
 
 export const getDashboardSummary = async (req, res, next) => {

@@ -3576,17 +3576,28 @@ textarea {
 }
 
 .live-pulse-dot {
+  position: relative;
   width: 7px;
   height: 7px;
   background-color: #10b981;
   border-radius: 50%;
-  animation: pulse 1.5s infinite;
+}
+
+.live-pulse-dot::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  background-color: #10b981;
+  animation: pulse 1.5s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+  will-change: transform, opacity;
+  pointer-events: none;
 }
 
 @keyframes pulse {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-  70% { transform: scale(1.15); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  0% { transform: scale(1); opacity: 0.8; }
+  70% { transform: scale(2.4); opacity: 0; }
+  100% { transform: scale(2.4); opacity: 0; }
 }
 
 .live-activity-title {
@@ -3897,6 +3908,7 @@ textarea {
   height: 100%;
   border-radius: 999px;
   transition: width 0.5s ease;
+  will-change: width;
 }
 
 .perf-bar-label {
@@ -3992,6 +4004,7 @@ textarea {
   border-radius: 999px;
   transition: width 0.6s ease;
   min-width: 4px;
+  will-change: width;
 }
 
 .perf-chart-score {
@@ -5123,6 +5136,7 @@ textarea {
   height: 100%;
   border-radius: 999px;
   transition: width 0.5s ease;
+  will-change: width;
 }
 
 .perf-chart-pct {
@@ -5280,19 +5294,33 @@ textarea {
 /* ─── Ultra-Smooth Shimmer Skeleton Loading ──────────────────────────────── */
 @keyframes shimmerPulse {
   0% {
-    background-position: -200% 0;
+    transform: translateX(-100%);
   }
   100% {
-    background-position: 200% 0;
+    transform: translateX(100%);
   }
 }
 
 .skeleton-box {
-  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 37%, #f1f5f9 63%);
-  background-size: 200% 100%;
-  animation: shimmerPulse 1.4s ease-in-out infinite;
+  position: relative;
+  overflow: hidden;
+  background: #f1f5f9;
   border-radius: 6px;
   display: inline-block;
+}
+
+.skeleton-box::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  transform: translateX(-100%);
+  animation: shimmerPulse 1.4s ease-in-out infinite;
+  will-change: transform;
+  pointer-events: none;
 }
 
 .skeleton-row {
@@ -5318,13 +5346,16 @@ textarea {
 /* ─── Live Indicator Badge ───────────────────────────────────────────────── */
 @keyframes livePulseGreen {
   0% {
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+    transform: scale(1);
+    opacity: 0.8;
   }
   70% {
-    box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
+    transform: scale(2.4);
+    opacity: 0;
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+    transform: scale(2.4);
+    opacity: 0;
   }
 }
 
@@ -5344,11 +5375,22 @@ textarea {
 }
 
 .badge-live-dot {
+  position: relative;
   width: 7px;
   height: 7px;
   background-color: #22c55e;
   border-radius: 50%;
-  animation: livePulseGreen 1.8s infinite;
+}
+
+.badge-live-dot::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  background-color: #22c55e;
+  animation: livePulseGreen 1.8s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+  will-change: transform, opacity;
+  pointer-events: none;
 }
 
 /* ─── Global Form Validation & Inline Errors ────────────────────────────── */

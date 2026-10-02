@@ -79,6 +79,14 @@ const getDateRange = (filter, startDate, endDate) => {
   return { start, end };
 };
 
+// Micro-cache (8s) for employee dashboard to eliminate document latency & TTFB
+const employeeDashboardCache = new Map();
+const EMPLOYEE_DASHBOARD_CACHE_TTL = 8000;
+
+export const invalidateEmployeeDashboardCache = () => {
+  employeeDashboardCache.clear();
+};
+
 export const getEmployeeDashboard = async (req, res, next) => {
   try {
     if (!await ensureDB()) {
@@ -101,6 +109,14 @@ export const getEmployeeDashboard = async (req, res, next) => {
     }
 
     const { filter = "today", startDate, endDate } = req.query;
+
+    // Check micro-cache for instant response (<2ms)
+    const cacheKey = `${String(employeeId)}_${filter}_${startDate || ''}_${endDate || ''}`;
+    const cached = employeeDashboardCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < EMPLOYEE_DASHBOARD_CACHE_TTL)) {
+      return res.status(200).json({ data: cached.data });
+    }
+
     const { start, end } = getDateRange(filter, startDate, endDate);
 
     const dateFilter = { employeeId, createdAt: { $gte: start, $lte: end } };
@@ -127,13 +143,23 @@ export const getEmployeeDashboard = async (req, res, next) => {
       Order.countDocuments(dateFilter),
       ReturnRequest.countDocuments(dateFilter),
       Customer.countDocuments(customerQuery),
-      Order.find(dateFilter).sort({ createdAt: -1 }).limit(5).lean(),
-      ReturnRequest.find(dateFilter).sort({ createdAt: -1 }).limit(5).lean(),
+      Order.find(dateFilter)
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .select("orderId customerName amount orderStatus parcelStatus numberOfUnits createdAt")
+        .lean(),
+      ReturnRequest.find(dateFilter)
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .select("returnId customerName amount returnStatus createdAt")
+        .lean(),
       Order.find(dateFilter).select("numberOfUnits amount").lean(),
       CallingRecord.find({
         employeeId,
         date: { $gte: start, $lte: end }
-      }).lean()
+      })
+        .select("outgoingCalls incomingCalls followUpCalls connectedCalls conversionsDone revenueGenerated")
+        .lean()
     ]);
 
     const totalIncentive = allOrders.reduce((sum, o) => {
@@ -153,23 +179,26 @@ export const getEmployeeDashboard = async (req, res, next) => {
     const conversionsDone = (callingRecords || []).reduce((sum, r) => sum + (r.conversionsDone || 0), 0);
     const callingRevenue = (callingRecords || []).reduce((sum, r) => sum + (r.revenueGenerated || 0), 0);
 
-    return res.status(200).json({
-      data: {
-        name: getEmployeeName(req),
-        filter,
-        orderCount,
-        returnCount,
-        leadCount,
-        callingCount: (callingRecords || []).length,
-        totalCallsDone,
-        connectedCalls,
-        conversionsDone,
-        callingRevenue,
-        totalIncentive: Math.round(totalIncentive),
-        recentOrders,
-        recentReturns
-      }
-    });
+    const responseData = {
+      name: getEmployeeName(req),
+      filter,
+      orderCount,
+      returnCount,
+      leadCount,
+      callingCount: (callingRecords || []).length,
+      totalCallsDone,
+      connectedCalls,
+      conversionsDone,
+      callingRevenue,
+      totalIncentive: Math.round(totalIncentive),
+      recentOrders,
+      recentReturns
+    };
+
+    // Store in micro-cache
+    employeeDashboardCache.set(cacheKey, { timestamp: Date.now(), data: responseData });
+
+    return res.status(200).json({ data: responseData });
   } catch (error) {
     return next(error);
   }
