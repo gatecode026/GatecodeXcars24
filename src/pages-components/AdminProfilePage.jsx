@@ -58,14 +58,14 @@ const AdminProfilePage = () => {
   const { user: authUser, updateUserData } = useAuth();
   const navigate = useNavigate();
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
   const [errors, setErrors] = useState({});
 
-  // Profile fields
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  // Profile fields pre-filled from auth context
+  const [name, setName] = useState(authUser?.name || "");
+  const [email, setEmail] = useState(authUser?.email || "");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [username, setUsername] = useState("");
 
@@ -79,29 +79,30 @@ const AdminProfilePage = () => {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  // Load current admin profile
+  // Load current admin profile in background
   useEffect(() => {
+    let isMounted = true;
     const fetchProfile = async () => {
       try {
-        setLoading(true);
         const res = await api.get("/auth/profile");
         const profile = res.data?.data;
-        if (profile) {
+        if (profile && isMounted) {
           setName(profile.name || "");
           setEmail(profile.email || "");
           setPhoneNumber(profile.phoneNumber || "");
           setUsername(profile.username || "");
         }
       } catch (err) {
-        if (authUser) {
+        if (authUser && isMounted) {
           setName(authUser.name || "");
           setEmail(authUser.email || "");
         }
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
     fetchProfile();
+    return () => { isMounted = false; };
   }, [authUser]);
 
   const handleSubmit = async (e) => {

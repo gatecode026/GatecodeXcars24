@@ -43,35 +43,43 @@ const decodeToken = (token) => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null); // Start with null, not a guest user
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const token = localStorage.getItem("dashboard_token");
+      if (token) return decodeToken(token);
+    } catch {}
+    return null;
+  });
+  const [loading, setLoading] = useState(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      const token = localStorage.getItem("dashboard_token");
+      if (token && decodeToken(token)) return false;
+    } catch {}
+    return false;
+  });
 
   useEffect(() => {
-    const initAuth = () => {
-      let token = null;
-      try {
-        token = localStorage.getItem("dashboard_token");
-      } catch {}
+    let token = null;
+    try {
+      token = localStorage.getItem("dashboard_token");
+    } catch {}
 
-      if (token) {
-        const decoded = decodeToken(token);
-        if (decoded) {
-          setUser(decoded);
-          setLoading(false);
-          return;
-        }
-        // Bad/corrupted token — remove it
-        try {
-          localStorage.removeItem("dashboard_token");
-        } catch {}
+    if (token) {
+      const decoded = decodeToken(token);
+      if (decoded) {
+        setUser(decoded);
+        setLoading(false);
+        return;
       }
+      try {
+        localStorage.removeItem("dashboard_token");
+      } catch {}
+    }
 
-      // No valid token - set user to null (not logged in)
-      setUser(null);
-      setLoading(false);
-    };
-
-    initAuth();
+    setUser(null);
+    setLoading(false);
   }, []);
 
   const login = useCallback(async (email, password, role) => {

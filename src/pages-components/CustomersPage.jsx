@@ -1,8 +1,6 @@
 "use client";
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import { getPdfDoc } from "../utils/pdfExport";
 import { api, emitDataSync, onDataSync } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import Toast from "../components/Toast";
@@ -228,8 +226,8 @@ const formatDateOnly = (d) => {
   });
 };
 
-const downloadLeadsPDF = (records) => {
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+const downloadLeadsPDF = async (records) => {
+  const { doc, autoTable } = await getPdfDoc({ orientation: "landscape", unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   let y = 16;
 

@@ -12,16 +12,11 @@ const nextConfig = {
       "react-router-dom": path.resolve(__dirname, "src/compat/react-router-dom.jsx")
     }
   },
-  webpack: (config, { dev }) => {
+  webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
       "react-router-dom": path.resolve(__dirname, "src/compat/react-router-dom.jsx")
     };
-    if (dev) {
-      config.cache = {
-        type: "memory"
-      };
-    }
     return config;
   },
   compress: true,

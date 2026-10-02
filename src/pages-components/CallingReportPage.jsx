@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import { getPdfDoc } from "../utils/pdfExport";
 import { api, emitDataSync, onDataSync } from "../api/client";
 import CsvImportModal from "../components/CsvImportModal";
 import { exportTableToCsv } from "../utils/csvHelper";
@@ -170,8 +169,8 @@ const formatDate = (d) =>
   d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "-";
 
 // ─── PDF Report Generation ──────────────────────────────────────────────────
-const downloadCallingPDF = (records, filter, startDate, endDate) => {
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+const downloadCallingPDF = async (records, filter, startDate, endDate) => {
+  const { doc, autoTable } = await getPdfDoc({ orientation: "landscape", unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   let y = 18;

@@ -1,7 +1,6 @@
 "use client";
 import { useMemo, useState, useCallback, useEffect } from "react";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import { getPdfDoc } from "../utils/pdfExport";
 import { api, toAbsoluteAssetUrl, emitDataSync, onDataSync } from "../api/client";
 import Toast from "../components/Toast";
 import ConfirmModal from "../components/ConfirmModal";
@@ -123,8 +122,8 @@ const statusBadge = (status) => {
   );
 };
 
-const downloadOrdersPDF = (orders) => {
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+const downloadOrdersPDF = async (orders) => {
+  const { doc, autoTable } = await getPdfDoc({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   let y = 20;
 

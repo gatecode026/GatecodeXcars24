@@ -1,7 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import { getPdfDoc } from "../utils/pdfExport";
 import { api, onDataSync } from "../api/client";
 
 const formatDate = (d) =>
@@ -36,7 +35,7 @@ const downloadEmployeePDF = async (employee, startDate, endDate) => {
     const res = await api.get(`/admin/employee-details/${employee._id}`, { params });
     const { orders, returns, callingRecords, customers } = res.data.data;
 
-    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const { doc, autoTable } = await getPdfDoc({ orientation: "portrait", unit: "mm", format: "a4" });
     const pageWidth = doc.internal.pageSize.getWidth();
     let y = 15;
 

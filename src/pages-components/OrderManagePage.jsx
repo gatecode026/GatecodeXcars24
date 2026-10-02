@@ -1,7 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import { getPdfDoc } from "../utils/pdfExport";
 import { api, toAbsoluteAssetUrl, emitDataSync, onDataSync } from "../api/client";
 import DataTable from "../components/DataTable";
 import EditModal from "../components/EditModal";
@@ -91,8 +90,8 @@ const fetchOrders = async () => {
   return res.data.data;
 };
 
-const downloadAllOrdersPDF = (orders) => {
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+const downloadAllOrdersPDF = async (orders) => {
+  const { doc, autoTable } = await getPdfDoc({ orientation: "landscape", unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   let y = 20;
 

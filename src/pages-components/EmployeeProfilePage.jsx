@@ -70,14 +70,14 @@ const EmployeeProfilePage = () => {
   const { user: authUser, updateUserData } = useAuth();
   const navigate = useNavigate();
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
   const [errors, setErrors] = useState({});
 
-  // Profile fields
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  // Profile fields pre-filled from auth context
+  const [name, setName] = useState(authUser?.name || "");
+  const [email, setEmail] = useState(authUser?.email || "");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [username, setUsername] = useState("");
 
@@ -99,16 +99,18 @@ const EmployeeProfilePage = () => {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  // Load current executive profile & dashboard stats
+  // Load current executive profile & dashboard stats in background
   useEffect(() => {
+    let isMounted = true;
     const fetchProfileAndStats = async () => {
       try {
-        setLoading(true);
         const [profileRes, dashRes, callRes] = await Promise.all([
           api.get("/auth/profile"),
           api.get("/employee/dashboard", { params: { filter: "month" } }).catch(() => ({ data: { data: {} } })),
           api.get("/employee/calling-records").catch(() => ({ data: { data: [] } }))
         ]);
+
+        if (!isMounted) return;
 
         const profile = profileRes.data?.data;
         if (profile) {
@@ -128,16 +130,16 @@ const EmployeeProfilePage = () => {
           callingCount: callList.length
         });
       } catch (err) {
-        if (authUser) {
+        if (authUser && isMounted) {
           setName(authUser.name || "");
           setEmail(authUser.email || "");
         }
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
-
     fetchProfileAndStats();
+    return () => { isMounted = false; };
   }, [authUser]);
 
   const handleSubmit = async (e) => {

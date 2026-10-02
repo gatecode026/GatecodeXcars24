@@ -66,7 +66,7 @@ export const useParams = () => {
   return params || {};
 };
 
-export const Link = React.forwardRef(({ to, href, children, prefetch = true, ...props }, ref) => {
+export const Link = React.forwardRef(({ to, href, children, prefetch, ...props }, ref) => {
   const destination = to || href || "#";
   return (
     <NextLink ref={ref} href={destination} prefetch={prefetch} {...props}>
@@ -76,7 +76,7 @@ export const Link = React.forwardRef(({ to, href, children, prefetch = true, ...
 });
 Link.displayName = "Link";
 
-export const NavLink = React.forwardRef(({ to, href, className, children, prefetch = true, ...props }, ref) => {
+export const NavLink = React.forwardRef(({ to, href, className, children, prefetch, ...props }, ref) => {
   const pathname = usePathname() || "/";
   const destination = to || href || "";
   const isActive = pathname === destination || (destination !== "/" && pathname.startsWith(destination));

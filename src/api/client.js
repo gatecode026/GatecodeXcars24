@@ -32,7 +32,8 @@ const isMasterDataUrl = (url = "") => {
     url.includes("/branches") ||
     url.includes("/employees-list") ||
     url.includes("/performance-settings") ||
-    url.includes("/users")
+    url.includes("/users") ||
+    url.includes("/auth/profile")
   );
 };
 
