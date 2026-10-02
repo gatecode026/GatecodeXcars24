@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { connectDB, DEFAULT_MONGO_URI } from "./config/db.js";
+import { connectDB, DEFAULT_MONGO_URI, isDatabaseReady } from "./config/db.js";
 import { ensureFixedAdminUser } from "./config/seedAdmin.js";
 
 function loadEnvFallback() {
@@ -46,15 +46,17 @@ if (!fs.existsSync(uploadDir)) {
 
 export async function runHandler(request, params = {}, middlewares = [], controller) {
   try {
-  try {
-    await connectDB(8000);
-    if (!global._adminSeeded) {
-      global._adminSeeded = true;
-      ensureFixedAdminUser().catch((err) => console.warn("Admin seed warning:", err.message));
+    try {
+      if (!isDatabaseReady()) {
+        await connectDB(8000);
+      }
+      if (!global._adminSeeded) {
+        global._adminSeeded = true;
+        ensureFixedAdminUser().catch((err) => console.warn("Admin seed warning:", err.message));
+      }
+    } catch (dbErr) {
+      console.warn("DB connection warning in routeRunner:", dbErr.message);
     }
-  } catch (dbErr) {
-    console.warn("DB connection warning in routeRunner:", dbErr.message);
-  }
 
     const url = new URL(request.url);
     const query = Object.fromEntries(url.searchParams.entries());

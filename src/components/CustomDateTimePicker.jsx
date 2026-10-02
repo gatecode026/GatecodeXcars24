@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 
 // Clean UI Icons
 const CalendarIcon = () => (
@@ -109,11 +110,44 @@ export const CustomDateTimePicker = ({
     }
   }, [parsed]);
 
-  // Click outside listener
+  const popoverRef = useRef(null);
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 320 });
+
+  const updatePosition = useCallback(() => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const popoverHeight = mode === "datetime" ? 365 : 340;
+    const popoverWidth = mode === "datetime" ? 520 : 320;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const isUpward = spaceBelow < popoverHeight && rect.top > popoverHeight;
+    const isRight = (rect.left + popoverWidth) > (window.innerWidth - 16);
+
+    setCoords({
+      top: isUpward ? Math.max(10, rect.top - popoverHeight - 6) : (rect.bottom + 6),
+      left: isRight ? Math.max(16, rect.right - popoverWidth) : Math.max(16, rect.left),
+      width: Math.min(popoverWidth, window.innerWidth - 32)
+    });
+  }, [mode]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [isOpen, updatePosition]);
+
+  // Click outside listener (checking both container and portaled popover)
   useEffect(() => {
     if (!isOpen) return;
     const handleClickOutside = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
+      if (
+        containerRef.current && !containerRef.current.contains(e.target) &&
+        popoverRef.current && !popoverRef.current.contains(e.target)
+      ) {
         setIsOpen(false);
       }
     };
@@ -291,23 +325,26 @@ export const CustomDateTimePicker = ({
           display: "flex",
           alignItems: "center",
           width: "100%",
-          padding: "8px 12px",
+          height: "38px",
+          minHeight: "38px",
+          padding: "0 12px",
           borderRadius: "8px",
-          border: isOpen ? "1px solid #0284c7" : "1px solid #cbd5e1",
+          border: isOpen ? "1.5px solid #0284c7" : "1.5px solid #cbd5e1",
           boxShadow: isOpen ? "0 0 0 3px rgba(2, 132, 199, 0.15)" : "none",
           backgroundColor: disabled ? "#f8fafc" : "#ffffff",
           cursor: disabled ? "not-allowed" : "pointer",
-          transition: "all 0.2s ease",
-          fontSize: "13.5px",
+          transition: "all 0.15s ease",
+          fontSize: "13px",
           color: displayText ? "#0f172a" : "#94a3b8",
-          userSelect: "none"
+          userSelect: "none",
+          boxSizing: "border-box"
         }}
       >
-        <span style={{ color: "#0284c7", display: "flex", alignItems: "center", marginRight: "10px" }}>
+        <span style={{ color: "#0284c7", display: "flex", alignItems: "center", marginRight: "8px", flexShrink: 0 }}>
           {mode === "datetime" ? <ClockIcon /> : <CalendarIcon />}
         </span>
 
-        <span style={{ flex: 1, fontWeight: displayText ? 500 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span style={{ flex: 1, fontWeight: displayText ? 600 : 400, color: displayText ? "#0f172a" : "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {displayText || placeholder || (mode === "datetime" ? "Select date & time" : "Select date")}
         </span>
 
@@ -326,34 +363,31 @@ export const CustomDateTimePicker = ({
               padding: "2px",
               display: "flex",
               alignItems: "center",
-              marginRight: "6px"
+              marginLeft: "4px"
             }}
             title="Clear date"
           >
             <CloseIcon />
           </button>
         )}
-
-        <span style={{ color: "#64748b", display: "flex", alignItems: "center", pointerEvents: "none" }}>
-          <CalendarIcon />
-        </span>
       </div>
 
-      {/* Popover Dropdown Panel */}
-      {isOpen && (
+      {/* Popover Dropdown Panel via Portal */}
+      {isOpen && typeof document !== "undefined" && createPortal(
         <div
+          ref={popoverRef}
           className="custom-picker-popover"
           style={{
-            position: "absolute",
-            top: "calc(100% + 6px)",
-            left: 0,
-            zIndex: 99999,
+            position: "fixed",
+            top: `${coords.top}px`,
+            left: `${coords.left}px`,
+            width: `${coords.width}px`,
+            zIndex: 999999,
             backgroundColor: "#ffffff",
             borderRadius: "12px",
             border: "1px solid #e2e8f0",
-            boxShadow: "0 14px 35px -4px rgba(15, 23, 42, 0.16), 0 4px 12px -2px rgba(15, 23, 42, 0.08)",
+            boxShadow: "0 20px 45px -8px rgba(15, 23, 42, 0.22), 0 2px 10px -2px rgba(15, 23, 42, 0.08)",
             padding: "16px",
-            width: mode === "datetime" ? "520px" : "320px",
             maxWidth: "95vw",
             display: "flex",
             flexDirection: "column",
@@ -669,7 +703,8 @@ export const CustomDateTimePicker = ({
               Done
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

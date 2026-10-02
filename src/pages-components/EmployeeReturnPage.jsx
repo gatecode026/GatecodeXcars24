@@ -4,6 +4,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { api, toAbsoluteAssetUrl, emitDataSync, onDataSync } from "../api/client";
 import Toast from "../components/Toast";
+import ConfirmModal from "../components/ConfirmModal";
 import CsvImportModal from "../components/CsvImportModal";
 import { exportTableToCsv } from "../utils/csvHelper";
 import { isValidMobile, isValidPincode } from "../utils/validators";
@@ -155,6 +156,8 @@ const EmployeeReturnPage = () => {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  const [deleteConfirmReturn, setDeleteConfirmReturn] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [viewReturn, setViewReturn] = useState(null);
   const [recentReturns, setRecentReturns] = useState([]);
   const [editingId, setEditingId] = useState(null);
@@ -311,18 +314,27 @@ const EmployeeReturnPage = () => {
     setIsFormOpen(true);
   };
 
-  const handleDeleteReturn = async (r) => {
-    if (!window.confirm(`Delete return request for "${r.customerName}"? This cannot be undone.`)) return;
+  const handleDeleteReturn = (r) => {
+    setDeleteConfirmReturn(r);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmReturn) return;
+    const r = deleteConfirmReturn;
+    setDeleting(true);
     // Immediately remove from state without reload
     setRecentReturns((prev) => prev.filter((ret) => ret._id !== r._id));
     try {
       await api.delete(`/employee/returns/${r._id}`);
       setToast("Return deleted successfully!");
       emitDataSync({ type: "return", action: "delete", id: r._id });
+      setDeleteConfirmReturn(null);
       fetchRecent(true);
     } catch {
       fetchRecent(true);
       setToast("Failed to delete return");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -1022,6 +1034,18 @@ const EmployeeReturnPage = () => {
       />
 
       {toast && <Toast message={toast} type={toast.includes("successfully") ? "success" : "error"} onClose={clearToast} />}
+
+      <ConfirmModal
+        isOpen={Boolean(deleteConfirmReturn)}
+        title={`Delete Return — ${deleteConfirmReturn?.customerName || ""}`}
+        message={`Are you sure you want to delete the return request for "${deleteConfirmReturn?.customerName || "this customer"}"? This action cannot be undone.`}
+        confirmText="Delete Return"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteConfirmReturn(null)}
+      />
     </div>
   );
 };

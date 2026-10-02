@@ -5,6 +5,8 @@ import { api, emitDataSync, onDataSync } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import CsvImportModal from "../components/CsvImportModal";
 import { exportTableToCsv } from "../utils/csvHelper";
+import Toast from "../components/Toast";
+import ConfirmModal from "../components/ConfirmModal";
 
 // Clean UI Icons
 const DownloadIcon = () => (
@@ -66,18 +68,25 @@ const UsersPage = () => {
   const [search, setSearch] = useState("");
   const [viewUser, setViewUser] = useState(null);
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [deleteConfirmUser, setDeleteConfirmUser] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
 
   const handleImportUsers = async (rows) => {
-    const res = await api.post("/users/bulk-import", { rows });
-    alert(res.data?.message || `Imported ${rows.length} users successfully!`);
-    emitDataSync({ type: "user", action: "bulk" });
-    fetchUsers();
+    try {
+      const res = await api.post("/users/bulk-import", { rows });
+      setToast({ message: res.data?.message || `Imported ${rows.length} users successfully!`, type: "success" });
+      emitDataSync({ type: "user", action: "bulk" });
+      fetchUsers();
+    } catch (err) {
+      setToast({ message: err.response?.data?.message || "Failed to import users", type: "error" });
+    }
   };
 
   const handleExportCSV = () => {
     if (!filtered || filtered.length === 0) {
-      alert("No users available to export");
+      setToast({ message: "No users available to export", type: "error" });
       return;
     }
     const headers = ["Name", "Email", "Phone Number", "Role", "Created Date"];
@@ -162,25 +171,35 @@ const UsersPage = () => {
       );
     });
 
-  const handleDelete = async (id, name, email) => {
+  const handleDelete = (id, name, email) => {
     if (
       currentUser &&
       (String(currentUser.id) === String(id) ||
         String(currentUser._id) === String(id) ||
         (currentUser.email && email && currentUser.email.toLowerCase() === email.toLowerCase()))
     ) {
-      alert("Critical Security Alert: You cannot delete your own active account.");
+      setToast({ message: "Critical Security Alert: You cannot delete your own active account.", type: "error" });
       return;
     }
-    if (!window.confirm(`Are you sure you want to delete employee "${name}"? The account will be deactivated and removed from the active table.`)) return;
+    setDeleteConfirmUser({ id, name });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmUser) return;
+    const { id, name } = deleteConfirmUser;
+    setDeleting(true);
     try {
       await api.delete(`/auth/users/${id}`);
       setUsers((prev) => prev.filter((u) => u._id !== id));
       emitDataSync({ type: "user", action: "delete", id });
+      setToast({ message: `Employee "${name}" deleted successfully`, type: "success" });
+      setDeleteConfirmUser(null);
     } catch (err) {
       const msg = err.response?.data?.message || "Failed to delete user";
-      alert(msg);
+      setToast({ message: msg, type: "error" });
       fetchUsers();
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -466,6 +485,26 @@ const UsersPage = () => {
         ]}
         requiredHeaders={["Name", "Email"]}
         onImport={handleImportUsers}
+      />
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      <ConfirmModal
+        isOpen={Boolean(deleteConfirmUser)}
+        title={`Delete Employee "${deleteConfirmUser?.name || ""}"`}
+        message={`Are you sure you want to delete employee "${deleteConfirmUser?.name || "this employee"}"? The account will be deactivated and removed from active access.`}
+        confirmText="Delete Account"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteConfirmUser(null)}
       />
     </div>
   );

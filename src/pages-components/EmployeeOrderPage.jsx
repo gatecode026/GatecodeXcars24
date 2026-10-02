@@ -4,6 +4,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { api, toAbsoluteAssetUrl, emitDataSync, onDataSync } from "../api/client";
 import Toast from "../components/Toast";
+import ConfirmModal from "../components/ConfirmModal";
 import CsvImportModal from "../components/CsvImportModal";
 import { exportTableToCsv } from "../utils/csvHelper";
 import { isValidMobile, isValidPincode } from "../utils/validators";
@@ -171,6 +172,8 @@ const EmployeeOrderPage = () => {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [viewOrder, setViewOrder] = useState(null);
   const [paymentFile, setPaymentFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -391,18 +394,27 @@ const EmployeeOrderPage = () => {
     setIsFormOpen(true);
   };
 
-  const handleDeleteOrder = async (order) => {
-    if (!window.confirm(`Delete order for "${order.customerName}"? This cannot be undone.`)) return;
+  const handleDeleteOrder = (order) => {
+    setDeleteConfirmOrder(order);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmOrder) return;
+    const order = deleteConfirmOrder;
+    setDeleting(true);
     // Immediately remove from state without reload
     setRecentOrders((prev) => prev.filter((o) => o._id !== order._id));
     try {
       await api.delete(`/employee/orders/${order._id}`);
       setToast("Order deleted successfully!");
       emitDataSync({ type: "order", action: "delete", id: order._id });
+      setDeleteConfirmOrder(null);
       fetchRecent(true);
     } catch {
       fetchRecent(true);
       setToast("Failed to delete order");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -1354,6 +1366,18 @@ const EmployeeOrderPage = () => {
       />
 
       {toast && <Toast message={toast} type={toast.includes("successfully") ? "success" : "error"} onClose={clearToast} />}
+
+      <ConfirmModal
+        isOpen={Boolean(deleteConfirmOrder)}
+        title={`Delete Order — ${deleteConfirmOrder?.customerName || ""}`}
+        message={`Are you sure you want to delete the order for "${deleteConfirmOrder?.customerName || "this customer"}"? This action cannot be undone.`}
+        confirmText="Delete Order"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteConfirmOrder(null)}
+      />
     </div>
   );
 };

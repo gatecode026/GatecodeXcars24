@@ -6,6 +6,7 @@ import { api, emitDataSync, onDataSync } from "../api/client";
 import DataTable from "../components/DataTable";
 import EditModal from "../components/EditModal";
 import Toast from "../components/Toast";
+import ConfirmModal from "../components/ConfirmModal";
 import CsvImportModal from "../components/CsvImportModal";
 import { exportTableToCsv } from "../utils/csvHelper";
 
@@ -129,6 +130,8 @@ const ReturnManagePage = () => {
   const [loading, setLoading] = useState(true);
   const [editRow, setEditRow] = useState(null);
   const [toast, setToast] = useState(null);
+  const [deleteConfirmRow, setDeleteConfirmRow] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const todayReturns = returns.filter((r) => {
     if (!r.createdAt) return false;
@@ -184,17 +187,27 @@ const ReturnManagePage = () => {
     }
   };
 
-  const handleDelete = async (row) => {
-    if (!window.confirm(`Delete return request for "${row.customerName}"? This cannot be undone.`)) return;
+  const handleDelete = (row) => {
+    setDeleteConfirmRow(row);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmRow) return;
+    const row = deleteConfirmRow;
+    setDeleting(true);
     // Immediately remove row from table without reload
     setReturns((prev) => prev.filter((r) => r._id !== row._id));
     try {
       await api.delete(`/returns/${row._id}`);
       emitDataSync({ type: "return", action: "delete", id: row._id });
+      setToast(`Return request for "${row.customerName}" deleted successfully`);
+      setDeleteConfirmRow(null);
     } catch (err) {
       console.error("Failed to delete return:", err);
       fetchReturns().then((data) => setReturns(data));
       setToast(err.response?.data?.message || "Failed to delete return");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -380,6 +393,18 @@ const ReturnManagePage = () => {
         ]}
         requiredHeaders={["Customer Name", "Mobile Number"]}
         onImport={handleImportReturns}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(deleteConfirmRow)}
+        title={`Delete Return — ${deleteConfirmRow?.customerName || ""}`}
+        message={`Are you sure you want to delete the return request for "${deleteConfirmRow?.customerName || "this customer"}"? This action cannot be undone.`}
+        confirmText="Delete Return"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteConfirmRow(null)}
       />
     </div>
   );

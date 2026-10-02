@@ -591,12 +591,17 @@ const EmployeeDetailsPage = () => {
                   <div className="table-scroll" style={{ overflowX: "auto", width: "100%", maxWidth: "100%" }}>
                     <table style={{ minWidth: "800px" }}>
                       <thead>
-                        <tr><th>Name</th><th>Mobile</th><th>Email</th><th>District</th><th>State</th><th>Follow Up</th><th>Date</th></tr>
+                        <tr><th>Appointment ID</th><th>Name</th><th>Mobile</th><th>Email</th><th>District</th><th>State</th><th>Follow Up</th><th>Date</th></tr>
                       </thead>
                       <tbody>
-                        {details.customers.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", padding: 20, color: "#94a3b8" }}>No CRM customers</td></tr>}
+                        {details.customers.length === 0 && <tr><td colSpan={8} style={{ textAlign: "center", padding: 20, color: "#94a3b8" }}>No CRM customers</td></tr>}
                         {details.customers.map((c) => (
                           <tr key={c._id}>
+                            <td>
+                              <span className="appointment-id-pill" style={{ fontSize: "11px" }}>
+                                {c.appointmentId || "-"}
+                              </span>
+                            </td>
                             <td style={{ fontWeight: 600 }}>{c.customerName || "-"}</td>
                             <td>{c.mobile || "-"}</td>
                             <td>{c.email || "-"}</td>

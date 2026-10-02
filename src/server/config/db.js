@@ -1,7 +1,13 @@
 import mongoose from "mongoose";
 import dns from "node:dns/promises";
+import dnsSync from "node:dns";
 
-// Do not force custom DNS at module load time as cloud runtimes (Vercel, AWS, etc.) block custom UDP port 53
+// Prefer IPv4 first to eliminate Windows IPv6 SRV DNS resolution timeouts for MongoDB Atlas
+try {
+  if (dnsSync && typeof dnsSync.setDefaultResultOrder === "function") {
+    dnsSync.setDefaultResultOrder("ipv4first");
+  }
+} catch (_) {}
 
 import fs from "node:fs";
 import path from "node:path";

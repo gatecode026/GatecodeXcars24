@@ -6,6 +6,7 @@ import { api, toAbsoluteAssetUrl, emitDataSync, onDataSync } from "../api/client
 import DataTable from "../components/DataTable";
 import EditModal from "../components/EditModal";
 import Toast from "../components/Toast";
+import ConfirmModal from "../components/ConfirmModal";
 import CsvImportModal from "../components/CsvImportModal";
 import { exportTableToCsv } from "../utils/csvHelper";
 
@@ -143,6 +144,8 @@ const OrderManagePage = () => {
   const [loading, setLoading] = useState(true);
   const [editRow, setEditRow] = useState(null);
   const [toast, setToast] = useState(null);
+  const [deleteConfirmRow, setDeleteConfirmRow] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const todayOrders = orders.filter((o) => {
     if (!o.createdAt) return false;
@@ -215,17 +218,27 @@ const OrderManagePage = () => {
     }
   };
 
-  const handleDelete = async (row) => {
-    if (!window.confirm(`Delete order for "${row.customerName}"? This cannot be undone.`)) return;
+  const handleDelete = (row) => {
+    setDeleteConfirmRow(row);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmRow) return;
+    const row = deleteConfirmRow;
+    setDeleting(true);
     // Immediately remove row from table without reload
     setOrders((prev) => prev.filter((o) => o._id !== row._id));
     try {
       await api.delete(`/orders/${row._id}`);
       emitDataSync({ type: "order", action: "delete", id: row._id });
+      setToast(`Order for "${row.customerName}" deleted successfully`);
+      setDeleteConfirmRow(null);
     } catch (err) {
       console.error("Failed to delete order:", err);
       fetchOrders().then((data) => setOrders(data));
       setToast(err.response?.data?.message || "Failed to delete order");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -459,6 +472,18 @@ const OrderManagePage = () => {
         ]}
         requiredHeaders={["Customer Name", "Mobile Number"]}
         onImport={handleImportOrders}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(deleteConfirmRow)}
+        title={`Delete Order — ${deleteConfirmRow?.customerName || ""}`}
+        message={`Are you sure you want to delete the order for "${deleteConfirmRow?.customerName || "this customer"}"? This action cannot be undone.`}
+        confirmText="Delete Order"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteConfirmRow(null)}
       />
     </div>
   );

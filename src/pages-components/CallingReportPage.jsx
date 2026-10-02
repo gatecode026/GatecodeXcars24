@@ -6,6 +6,8 @@ import autoTable from "jspdf-autotable";
 import { api, emitDataSync, onDataSync } from "../api/client";
 import CsvImportModal from "../components/CsvImportModal";
 import { exportTableToCsv } from "../utils/csvHelper";
+import Toast from "../components/Toast";
+import ConfirmModal from "../components/ConfirmModal";
 
 // ─── SVG Icons ───────────────────────────────────────────────────────────────
 const HeadsetIcon = () => (
@@ -289,18 +291,24 @@ const CallingReportPage = () => {
   const [endDate, setEndDate] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [deletingId, setDeletingId] = useState(null);
+  const [deleteConfirmRecord, setDeleteConfirmRecord] = useState(null);
+  const [toast, setToast] = useState(null);
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
 
   const handleImportCallingRecords = async (rows) => {
-    const res = await api.post("/calling-records/bulk-import", { rows });
-    alert(res.data?.message || `Imported ${rows.length} calling records successfully!`);
-    emitDataSync({ type: "calling", action: "bulk" });
-    fetchRecords(false);
+    try {
+      const res = await api.post("/calling-records/bulk-import", { rows });
+      setToast({ message: res.data?.message || `Imported ${rows.length} calling records successfully!`, type: "success" });
+      emitDataSync({ type: "calling", action: "bulk" });
+      fetchRecords(false);
+    } catch (err) {
+      setToast({ message: err.response?.data?.message || "Failed to import records", type: "error" });
+    }
   };
 
   const handleExportCSV = () => {
     if (!filteredRecords || filteredRecords.length === 0) {
-      alert("No calling records available to export");
+      setToast({ message: "No calling records available to export", type: "error" });
       return;
     }
     const headers = [
@@ -461,17 +469,24 @@ const CallingReportPage = () => {
     );
   }, [records, searchQuery]);
 
-  const handleDelete = async (r) => {
-    if (!window.confirm(`Delete calling record of ${r.employeeName || "Executive"} for ${formatDate(r.date)}?`)) return;
+  const handleDelete = (r) => {
+    setDeleteConfirmRecord(r);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmRecord) return;
+    const r = deleteConfirmRecord;
     // Immediately remove row from state without reload
     setRecords((prev) => prev.filter((rec) => rec._id !== r._id));
     try {
       setDeletingId(r._id);
       await api.delete(`/calling-records/${r._id}`);
       emitDataSync({ type: "calling", action: "delete", id: r._id });
+      setToast({ message: "Calling record deleted successfully", type: "success" });
+      setDeleteConfirmRecord(null);
       fetchRecords(true);
     } catch (err) {
-      alert("Failed to delete record: " + (err.response?.data?.message || err.message));
+      setToast({ message: "Failed to delete record: " + (err.response?.data?.message || err.message), type: "error" });
       fetchRecords(true);
     } finally {
       setDeletingId(null);
@@ -1185,6 +1200,26 @@ const CallingReportPage = () => {
         ]}
         requiredHeaders={["Date", "Outgoing Calls", "Connected Calls"]}
         onImport={handleImportCallingRecords}
+      />
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      <ConfirmModal
+        isOpen={Boolean(deleteConfirmRecord)}
+        title={`Delete Calling Record — ${deleteConfirmRecord?.employeeName || "Executive"}`}
+        message={`Are you sure you want to delete the calling record for ${formatDate(deleteConfirmRecord?.date)}? This action cannot be undone.`}
+        confirmText="Delete Record"
+        cancelText="Cancel"
+        variant="danger"
+        loading={Boolean(deletingId)}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteConfirmRecord(null)}
       />
     </div>
   );

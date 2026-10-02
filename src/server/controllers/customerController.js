@@ -142,14 +142,29 @@ const buildCustomerFilter = (req) => {
 };
 
 /** Normalise a raw Customer document for consistent API output */
-const normalizeCustomer = (c) => ({
-  ...c,
-  appointmentId: c.appointmentId || `AP-${String(c._id).slice(-5).toUpperCase()}`,
-  leadBy: c.leadBy || c.employeeName || "Executive",
-  carNumber: c.carNumber || "-",
-  verificationStatus: c.verificationStatus || (c.verified ? "Verified" : "Pending"),
-  leadStatus: c.leadStatus || (c.followUp === "Converted" ? "Completed" : "Pending")
-});
+const normalizeCustomer = (c) => {
+  let aptId = c.appointmentId || `AP-${String(c._id).slice(-5).toUpperCase()}`;
+  if (!aptId.startsWith("AP-")) {
+    aptId = `AP-${aptId.replace(/^AP-?/, "").toUpperCase()}`;
+  }
+  let custName = c.customerName || "";
+  if (custName) {
+    custName = String(custName)
+      .trim()
+      .toLowerCase()
+      .replace(/\b([a-z])/g, (ch) => ch.toUpperCase());
+  }
+
+  return {
+    ...c,
+    appointmentId: aptId,
+    customerName: custName || c.customerName,
+    leadBy: c.leadBy || c.employeeName || "Executive",
+    carNumber: c.carNumber || "-",
+    verificationStatus: c.verificationStatus || (c.verified ? "Verified" : "Pending"),
+    leadStatus: c.leadStatus || (c.followUp === "Converted" ? "Completed" : "Pending")
+  };
+};
 
 // ---------------------------------------------------------------------------
 // Controllers
@@ -304,7 +319,9 @@ export const createCustomer = async (req, res, next) => {
       } catch (_) {}
     }
 
-    const generatedAptId = appointmentId?.trim() || `AP-${Math.floor(10000 + Math.random() * 90000)}`;
+    const generatedAptId = (appointmentId && String(appointmentId).trim())
+      ? String(appointmentId).trim().toUpperCase()
+      : `AP-${Math.floor(10000 + Math.random() * 90000)}`;
 
     const customer = await Customer.create({
       employeeId: targetEmployeeId,
@@ -418,6 +435,10 @@ export const updateCustomer = async (req, res, next) => {
         }
         if (field === "carNumber" && req.body[field]) {
           customer[field] = String(req.body[field]).trim().toUpperCase();
+        } else if (field === "appointmentId") {
+          if (req.body.appointmentId && String(req.body.appointmentId).trim()) {
+            customer.appointmentId = String(req.body.appointmentId).trim().toUpperCase();
+          }
         } else if (field === "verified") {
           customer.verified = Boolean(req.body[field]);
         } else if (field === "verificationStatus") {

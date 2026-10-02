@@ -45,6 +45,14 @@ customerSchema.pre("save", function () {
   if (!this.appointmentId) {
     const idPart = this._id ? String(this._id).slice(-5).toUpperCase() : Math.floor(10000 + Math.random() * 90000);
     this.appointmentId = `AP-${idPart}`;
+  } else if (!this.appointmentId.startsWith("AP-")) {
+    this.appointmentId = `AP-${this.appointmentId.replace(/^AP-?/, "").toUpperCase()}`;
+  }
+  if (this.customerName) {
+    this.customerName = String(this.customerName)
+      .trim()
+      .toLowerCase()
+      .replace(/\b([a-z])/g, (c) => c.toUpperCase());
   }
   if (!this.leadBy) {
     this.leadBy = this.employeeName;

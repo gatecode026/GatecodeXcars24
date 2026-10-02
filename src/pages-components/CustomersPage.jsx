@@ -7,6 +7,8 @@ import { api, emitDataSync, onDataSync } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import Toast from "../components/Toast";
 import CsvImportModal from "../components/CsvImportModal";
+import CustomDateTimePicker from "../components/CustomDateTimePicker";
+import ConfirmModal from "../components/ConfirmModal";
 
 const UploadIcon = () => (
   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -16,9 +18,34 @@ const UploadIcon = () => (
   </svg>
 );
 
+const FileSpreadsheetIcon = () => (
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <path d="M8 13h8" />
+    <path d="M8 17h8" />
+    <path d="M12 9v12" />
+  </svg>
+);
+
+const FilePdfIcon = () => (
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="9" y1="13" x2="15" y2="13" />
+    <line x1="9" y1="17" x2="15" y2="17" />
+  </svg>
+);
+
+const FilterIcon = () => (
+  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+  </svg>
+);
+
 // --- Premium Header Icons ---
 const ClockIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="10" />
     <polyline points="12 6 12 12 16 14" />
   </svg>
@@ -107,21 +134,21 @@ const ActionWrenchIcon = () => (
 );
 
 const SearchIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="11" cy="11" r="8" />
     <line x1="21" y1="21" x2="16.65" y2="16.65" />
   </svg>
 );
 
 const PlusIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <line x1="12" y1="5" x2="12" y2="19" />
     <line x1="5" y1="12" x2="19" y2="12" />
   </svg>
 );
 
 const DownloadIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
     <polyline points="7 10 12 15 17 10" />
     <line x1="12" y1="15" x2="12" y2="3" />
@@ -254,6 +281,103 @@ const downloadLeadsPDF = (records) => {
   doc.save(`GatecodeXcars24_Appointments_${new Date().toISOString().split("T")[0]}.pdf`);
 };
 
+// Smart Auto-Formatter for Car Registration & Model
+// Automatically formats inputs like "RJ14ZH6476ACTIVA" -> "RJ-14-ZH-6476 / Activa"
+// or "dl01ab1234 honda city" -> "DL-01-AB-1234 / Honda City"
+export const formatCarRegAndModel = (input, isBlur = false) => {
+  if (!input) return "";
+  let str = String(input).trim();
+  if (!str) return "";
+
+  let regPart = "";
+  let modelPart = "";
+
+  // 1. Explicit slash separating reg and model
+  if (str.includes("/")) {
+    const parts = str.split("/");
+    regPart = parts[0].trim();
+    modelPart = parts.slice(1).join("/").trim();
+  } else {
+    // 2. Check BH series: e.g. 22BH1234AA followed optionally by model (e.g. 22BH1234AA THAR)
+    const bhMatch = str.match(/^([0-9]{2}[\s\-]?[A-Za-z]{2}[\s\-]?[0-9]{1,4}[\s\-]?[A-Za-z]{1,2})(.*)$/);
+    if (bhMatch) {
+      regPart = bhMatch[1];
+      modelPart = bhMatch[2] || "";
+    } else {
+      // 3. Standard Indian plate: State (2) + RTO (1-2) + Series (0-3) + Number (1-4)
+      // Followed by ANY remaining characters (which is the car model, e.g. ACTIVA, SWIFT)
+      const stdMatch = str.match(/^([A-Za-z]{2}[\s\-]?[0-9]{1,2}[\s\-]?[A-Za-z]{0,3}[\s\-]?[0-9]{1,4})(.*)$/);
+      if (stdMatch) {
+        regPart = stdMatch[1];
+        modelPart = stdMatch[2] || "";
+      } else {
+        regPart = str;
+      }
+    }
+  }
+
+  // Format Registration Number
+  const cleanReg = regPart.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  let formattedReg = "";
+
+  const bhClean = cleanReg.match(/^([0-9]{2})([A-Z]{2})([0-9]{1,4})([A-Z]{1,2})?$/);
+  if (bhClean) {
+    formattedReg = [bhClean[1], bhClean[2], bhClean[3], bhClean[4]].filter(Boolean).join("-");
+  } else {
+    const stdClean = cleanReg.match(/^([A-Z]{2})([0-9]{1,2})?([A-Z]{1,3})?([0-9]{1,4})?/);
+    if (stdClean && stdClean[1]) {
+      const p1 = stdClean[1];
+      let p2 = stdClean[2] || "";
+      if (isBlur && p2.length === 1) p2 = `0${p2}`;
+      const p3 = stdClean[3] || "";
+      const p4 = stdClean[4] || "";
+      formattedReg = [p1, p2, p3, p4].filter(Boolean).join("-");
+    } else {
+      formattedReg = cleanReg;
+    }
+  }
+
+  // Format Model Part (Title Case)
+  let formattedModel = "";
+  if (modelPart) {
+    const cleanModel = modelPart.replace(/^[\s\/\-_]+/, "").trim();
+    if (cleanModel) {
+      formattedModel = cleanModel
+        .replace(/\s+/g, " ")
+        .toLowerCase()
+        .replace(/\b([a-z])/g, (c) => c.toUpperCase());
+    }
+  }
+
+  if (formattedReg && formattedModel) {
+    return `${formattedReg} / ${formattedModel}`;
+  }
+  if (formattedReg && (str.includes("/") || (formattedReg.length >= 10 && !formattedModel && str.endsWith(" ")))) {
+    return `${formattedReg} / `;
+  }
+  return formattedReg || str;
+};
+
+// Smart Auto-Formatter for Appointment ID (e.g. "12345" -> "AP-12345")
+export const formatAptId = (val) => {
+  if (!val) return "-";
+  let s = String(val).trim().toUpperCase();
+  if (!s || s === "-") return "-";
+  if (!s.startsWith("AP-")) {
+    s = `AP-${s.replace(/^AP-?/, "")}`;
+  }
+  return s;
+};
+
+// Smart Auto-Formatter for Customer Name (Title Case)
+export const formatCustomerName = (val) => {
+  if (!val) return "-";
+  return String(val)
+    .trim()
+    .toLowerCase()
+    .replace(/\b([a-z])/g, (c) => c.toUpperCase());
+};
+
 const CustomersPage = ({ defaultTab = "all" }) => {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
@@ -270,8 +394,11 @@ const CustomersPage = ({ defaultTab = "all" }) => {
   const [editLead, setEditLead] = useState(null);
   const [activeDrawer, setActiveDrawer] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [deleteConfirmLead, setDeleteConfirmLead] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const [formData, setFormData] = useState({
+    appointmentId: "",
     customerName: "",
     mobile: "",
     email: "",
@@ -370,12 +497,21 @@ const CustomersPage = ({ defaultTab = "all" }) => {
   useEffect(() => {
     const isModalOpen = Boolean(showAddModal || editLead || activeDrawer);
     if (isModalOpen) {
+      document.body.classList.add("modal-open");
+      document.documentElement.classList.add("modal-open");
       document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
     } else {
+      document.body.classList.remove("modal-open");
+      document.documentElement.classList.remove("modal-open");
       document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
     }
     return () => {
+      document.body.classList.remove("modal-open");
+      document.documentElement.classList.remove("modal-open");
       document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
     };
   }, [showAddModal, editLead, activeDrawer]);
 
@@ -444,6 +580,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
 
   const handleOpenAddModal = () => {
     setFormData({
+      appointmentId: "",
       customerName: "",
       mobile: "",
       email: "",
@@ -467,6 +604,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
     setEditLead(lead);
     setFormErrors({});
     setFormData({
+      appointmentId: lead.appointmentId || "",
       customerName: lead.customerName || "",
       mobile: lead.mobile || "",
       email: lead.email || "",
@@ -504,11 +642,22 @@ const CustomersPage = ({ defaultTab = "all" }) => {
 
   const handleSaveLead = async (e) => {
     e.preventDefault();
-    if (!validateLead()) return;
+    if (!validateLead()) {
+      setToast({ message: "Please check required fields: Customer Name and a valid 10-digit mobile number.", type: "error" });
+      return;
+    }
     setSubmitting(true);
     try {
+      const rawAptId = formData.appointmentId ? formData.appointmentId.trim().toUpperCase() : "";
+      const trimmedAptId = rawAptId ? (rawAptId.startsWith("AP-") ? rawAptId : `AP-${rawAptId.replace(/^AP-?/, "")}`) : undefined;
+      const formattedCustName = formData.customerName ? formatCustomerName(formData.customerName) : "";
+      const formattedCarNum = formData.carNumber ? formatCarRegAndModel(formData.carNumber, true) : "";
+
       const payload = {
         ...formData,
+        customerName: formattedCustName || formData.customerName,
+        carNumber: formattedCarNum || formData.carNumber,
+        appointmentId: trimmedAptId || undefined,
         odometerKm: Number(formData.odometerKm) || 0,
         verified: formData.verificationStatus === "Verified",
         followUp: formData.followUp || "Follow-up",
@@ -517,10 +666,10 @@ const CustomersPage = ({ defaultTab = "all" }) => {
 
       if (editLead) {
         const res = await api.put(`/customers/${editLead._id}`, payload);
-        const updatedLead = res.data?.data || { ...editLead, ...payload };
+        const updatedLead = res.data?.data || { ...editLead, ...payload, appointmentId: trimmedAptId || editLead.appointmentId };
         // Immediately update row in table without reload
         setLeads((prev) => prev.map((l) => (l._id === editLead._id ? { ...l, ...updatedLead } : l)));
-        setToast({ message: `Lead ${editLead.appointmentId} updated successfully!`, type: "success" });
+        setToast({ message: `Lead ${updatedLead.appointmentId || editLead.appointmentId} updated successfully!`, type: "success" });
         setEditLead(null);
         emitDataSync({ type: "customer", action: "update", record: updatedLead });
       } else {
@@ -530,7 +679,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
           // Immediately prepend new row without reload, deduplicating by _id
           setLeads((prev) => [createdLead, ...prev.filter((l) => l._id !== createdLead._id)]);
         }
-        setToast({ message: "New Lead & Appointment created successfully!", type: "success" });
+        setToast({ message: `New Lead & Appointment created successfully! [${createdLead?.appointmentId || ""}]`, type: "success" });
         setShowAddModal(false);
         emitDataSync({ type: "customer", action: "create", record: createdLead });
       }
@@ -548,20 +697,27 @@ const CustomersPage = ({ defaultTab = "all" }) => {
     }
   };
 
-  const handleDeleteLead = async (id, aptId) => {
-    if (!window.confirm(`Are you sure you want to delete lead ${aptId || "this lead"}? This action cannot be undone.`)) {
-      return;
-    }
+  const handleRequestDeleteLead = (id, aptId) => {
+    setDeleteConfirmLead({ id, aptId: formatAptId(aptId) });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmLead) return;
+    const { id, aptId } = deleteConfirmLead;
+    setDeleting(true);
     try {
       // Immediately remove record from table without reload
       setLeads((prev) => prev.filter((l) => l._id !== id));
       await api.delete(`/customers/${id}`);
       setToast({ message: `Lead ${aptId || ""} deleted successfully`, type: "success" });
       emitDataSync({ type: "customer", action: "delete", id });
+      setDeleteConfirmLead(null);
       fetchLeads({ silent: true });
     } catch (err) {
       fetchLeads({ silent: true });
       setToast({ message: err.response?.data?.message || "Failed to delete lead", type: "error" });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -636,6 +792,19 @@ const CustomersPage = ({ defaultTab = "all" }) => {
     [filteredLeads, currentPage, PAGE_SIZE]
   );
 
+  const clearAllFilters = () => {
+    setDateType("createdAt");
+    setPeriod("all");
+    setFromDate("");
+    setToDate("");
+    setStatusFilter("");
+    setLeadByFilter("");
+    setSearchTerm("");
+    setSearchDebounced("");
+  };
+
+  const hasActiveFilters = dateType !== "createdAt" || period !== "all" || Boolean(statusFilter) || Boolean(leadByFilter) || Boolean(searchTerm) || Boolean(searchDebounced.trim());
+
   return (
     <div className="content-area">
       {/* Page Header */}
@@ -652,7 +821,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
             title="Import Leads from CSV"
           >
             <UploadIcon />
-            Import CSV
+            <span>Import CSV</span>
           </button>
           <button
             className="btn btn-secondary"
@@ -660,20 +829,20 @@ const CustomersPage = ({ defaultTab = "all" }) => {
             disabled={exporting}
             title="Export current filtered results to CSV (Excel-ready)"
           >
-            <DownloadIcon />
-            {exporting ? "Exporting..." : "Export CSV"}
+            <FileSpreadsheetIcon />
+            <span>{exporting ? "Exporting..." : "Export CSV"}</span>
           </button>
           <button
             className="btn btn-secondary"
             onClick={() => downloadLeadsPDF(filteredLeads)}
             title="Export to PDF"
           >
-            <DownloadIcon />
-            Export PDF
+            <FilePdfIcon />
+            <span>Export PDF</span>
           </button>
           <button className="btn btn-primary" onClick={handleOpenAddModal}>
             <PlusIcon />
-            Add New Lead
+            <span>Add New Lead</span>
           </button>
         </div>
       </div>
@@ -681,7 +850,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
       {/* Main Table Card */}
       <div className="table-card">
         <div className="table-header-bar">
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
             {[
               { key: "all", label: `All Leads (${leads.length})` },
               { key: "verified", label: "Verified Only" },
@@ -702,161 +871,226 @@ const CustomersPage = ({ defaultTab = "all" }) => {
             <SearchIcon />
             <input
               type="text"
-              placeholder="Search by ID, Name, Car No, Mobile, Executive..."
+              placeholder="Search leads, ID, phone, car..."
               value={searchTerm}
               onChange={handleSearchChange}
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm("");
+                  setSearchDebounced("");
+                }}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: "#94a3b8",
+                  cursor: "pointer",
+                  padding: 0,
+                  fontSize: "13px",
+                  display: "flex",
+                  alignItems: "center"
+                }}
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Server-Side Filter Bar */}
-        <div className="filter-bar-row">
-          <div className="filter-bar-group">
-            <label className="filter-label">Date Field</label>
-            <select
-              className="filter-select"
-              value={dateType}
-              onChange={(e) => setDateType(e.target.value)}
-            >
-              <option value="createdAt">Timestamp</option>
-              <option value="leadDate">Lead Date</option>
-              <option value="appointmentDate">Appointment Date</option>
-            </select>
-          </div>
-
-          <div className="filter-bar-group">
-            <label className="filter-label">Period</label>
-            <div className="filter-period-pills">
-              {[
-                { key: "all", label: "All" },
-                { key: "today", label: "Today" },
-                { key: "yesterday", label: "Yesterday" },
-                { key: "week", label: "This Week" },
-                { key: "month", label: "This Month" },
-                { key: "last_month", label: "Last Month" },
-                { key: "custom", label: "Custom" }
-              ].map(({ key, label }) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`filter-pill ${period === key ? "active" : ""}`}
-                  onClick={() => setPeriod(key)}
+        {/* Server-Side Filter Bar Container */}
+        <div className="filter-bar-container">
+          <div className="filter-bar-top">
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <div className="filter-field-item">
+                <span className="filter-field-label" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                  <CalendarIcon />
+                  <span>Date Field</span>
+                </span>
+                <select
+                  className="filter-select-modern"
+                  value={dateType}
+                  onChange={(e) => setDateType(e.target.value)}
                 >
-                  {label}
+                  <option value="createdAt">Timestamp</option>
+                  <option value="leadDate">Lead Date</option>
+                  <option value="appointmentDate">Appointment Date</option>
+                </select>
+              </div>
+
+              <div className="filter-period-pills-modern">
+                {[
+                  { key: "all", label: "All" },
+                  { key: "today", label: "Today" },
+                  { key: "yesterday", label: "Yesterday" },
+                  { key: "week", label: "This Week" },
+                  { key: "month", label: "This Month" },
+                  { key: "last_month", label: "Last Month" },
+                  { key: "custom", label: "Custom" }
+                ].map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`filter-pill-modern ${period === key ? "active" : ""}`}
+                    onClick={() => setPeriod(key)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {period === "custom" && (
+              <div className="filter-custom-range" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <div style={{ width: "135px" }}>
+                  <CustomDateTimePicker
+                    mode="date"
+                    value={fromDate}
+                    onChange={(val) => setFromDate(val)}
+                    placeholder="From Date"
+                  />
+                </div>
+                <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>to</span>
+                <div style={{ width: "135px" }}>
+                  <CustomDateTimePicker
+                    mode="date"
+                    value={toDate}
+                    onChange={(val) => setToDate(val)}
+                    placeholder="To Date"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="filter-bar-bottom">
+            <div className="filter-controls-group">
+              <div className="filter-field-item">
+                <label className="filter-field-label">Verified</label>
+                <select
+                  className="filter-select-modern"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="">All Statuses</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Follow-up">Follow-up</option>
+                  <option value="Verified">Verified</option>
+                  <option value="Rejected">Rejected</option>
+                </select>
+              </div>
+
+              <div className="filter-field-item">
+                <label className="filter-field-label">Lead By</label>
+                <select
+                  className="filter-select-modern"
+                  value={leadByFilter}
+                  onChange={(e) => setLeadByFilter(e.target.value)}
+                >
+                  <option value="">All Executives</option>
+                  {employeesList.map((emp) => (
+                    <option key={emp} value={emp}>{emp}</option>
+                  ))}
+                </select>
+              </div>
+
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  className="filter-clear-btn-modern"
+                  onClick={clearAllFilters}
+                  title="Clear all applied filters"
+                >
+                  ✕ Reset Filters
                 </button>
-              ))}
+              )}
+            </div>
+
+            <div className="table-slide-controls">
+              <button
+                type="button"
+                className="slide-btn"
+                onClick={() => slideTable("left")}
+                title="Scroll Left"
+              >
+                <ChevronLeftIcon />
+              </button>
+              <button
+                type="button"
+                className="slide-btn"
+                onClick={() => slideTable("right")}
+                title="Scroll Right"
+              >
+                <ChevronRightIcon />
+              </button>
             </div>
           </div>
-
-          {period === "custom" && (
-            <div className="filter-bar-group filter-date-range">
-              <label className="filter-label">From</label>
-              <input
-                type="date"
-                className="filter-date-input"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                max={toDate || new Date().toISOString().slice(0, 10)}
-              />
-              <span className="filter-date-sep">—</span>
-              <label className="filter-label">To</label>
-              <input
-                type="date"
-                className="filter-date-input"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                min={fromDate}
-                max={new Date().toISOString().slice(0, 10)}
-              />
-            </div>
-          )}
-
-          <div className="filter-bar-group">
-            <label className="filter-label">VERIFIED</label>
-            <select
-              className="filter-select"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="">All Statuses</option>
-              <option value="Pending">Pending</option>
-              <option value="Follow-up">Follow-up</option>
-              <option value="Verified">Verified</option>
-              <option value="Rejected">Rejected</option>
-            </select>
-          </div>
-
-          <div className="filter-bar-group">
-            <label className="filter-label">Lead By</label>
-            <select
-              className="filter-select"
-              value={leadByFilter}
-              onChange={(e) => setLeadByFilter(e.target.value)}
-            >
-              <option value="">All Executives</option>
-              {employeesList.map((emp) => (
-                <option key={emp} value={emp}>{emp}</option>
-              ))}
-            </select>
-          </div>
-
-          {(dateType !== "createdAt" || period !== "all" || statusFilter || leadByFilter || searchDebounced.trim()) && (
-            <button
-              type="button"
-              className="filter-clear-btn"
-              onClick={() => {
-                setDateType("createdAt");
-                setPeriod("all");
-                setFromDate("");
-                setToDate("");
-                setStatusFilter("");
-                setLeadByFilter("");
-                setSearchTerm("");
-                setSearchDebounced("");
-              }}
-            >
-              ✕ Clear Filters
-            </button>
-          )}
         </div>
 
-        {/* Table Container (Slidable with Sticky Action Column) */}
-        <div className="table-container">
-          <table className="leads-table slidable-table">
-            <thead>
-              <tr>
-                <th>Appointment ID</th>
-                <th>Lead Date</th>
-                <th>Appointment Date</th>
-                <th>Car Number</th>
-                <th>Oddo Meter/KM</th>
-                <th>CX Name</th>
-                <th>Cx Mobile No.</th>
-                <th>Lead By</th>
-                <th>Follow Up Done By</th>
-                <th>Date of Follow-up</th>
-                <th>VERIFIED</th>
-                <th>Timestamp</th>
-                <th style={{ textAlign: "center", minWidth: "120px" }}>
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
+        {/* Table / Empty State */}
+        {loading ? (
+          <div className="table-empty-state-modern" style={{ border: "none" }}>
+            <div className="empty-icon-wrap" style={{ background: "#f0f9ff" }}>
+              <ClockIcon />
+            </div>
+            <h4 className="empty-title">Loading leads &amp; appointments...</h4>
+            <p className="empty-subtitle">Fetching latest pipeline records and dossiers.</p>
+          </div>
+        ) : filteredLeads.length === 0 ? (
+          <div className="table-empty-state-modern">
+            <div className="empty-icon-wrap">
+              <SearchIcon />
+            </div>
+            <h4 className="empty-title">No leads found</h4>
+            <p className="empty-subtitle">
+              {hasActiveFilters
+                ? "No leads match your current search or filter criteria."
+                : "You have not registered any customer leads yet."}
+            </p>
+            {hasActiveFilters ? (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={clearAllFilters}
+              >
+                ✕ Clear All Filters
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={handleOpenAddModal}
+              >
+                <PlusIcon /> Add New Lead
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="table-container" ref={tableContainerRef}>
+            <table className="leads-table slidable-table">
+              <thead>
                 <tr>
-                  <td colSpan="13" style={{ textAlign: "center", padding: "48px 24px", color: "var(--text-muted)" }}>
-                    Loading leads &amp; appointments...
-                  </td>
+                  <th>Appointment ID</th>
+                  <th>Lead Date</th>
+                  <th>Appointment Date</th>
+                  <th>Car Number</th>
+                  <th>Oddo Meter/KM</th>
+                  <th>CX Name</th>
+                  <th>Cx Mobile No.</th>
+                  <th>Lead By</th>
+                  <th>Follow Up Done By</th>
+                  <th>Date of Follow-up</th>
+                  <th>VERIFIED</th>
+                  <th>Timestamp</th>
+                  <th style={{ textAlign: "center", minWidth: "120px" }}>
+                    Actions
+                  </th>
                 </tr>
-              ) : filteredLeads.length === 0 ? (
-                <tr>
-                  <td colSpan="13" style={{ textAlign: "center", padding: "48px 24px", color: "var(--text-muted)" }}>
-                    No leads found matching criteria.
-                  </td>
-                </tr>
-              ) : (
-                paginatedLeads.map((lead) => {
+              </thead>
+              <tbody>
+                {paginatedLeads.map((lead) => {
                   const statusKey = (lead.verificationStatus || (lead.verified ? "Verified" : "Pending")).toLowerCase().replace(/\s+/g, "");
                   const cleanMobile = (lead.mobile || "").replace(/\D/g, "");
                   const waUrl = `https://wa.me/91${cleanMobile}?text=${encodeURIComponent(
@@ -873,7 +1107,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                           onClick={() => setActiveDrawer(lead)}
                           title="Click to view full lead dossier"
                         >
-                          {lead.appointmentId}
+                          {formatAptId(lead.appointmentId)}
                         </span>
                       </td>
 
@@ -894,7 +1128,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                       {/* 4. Car Number */}
                       <td>
                         <span className="car-number-badge">
-                          {lead.carNumber || "N/A"}
+                          {formatCarRegAndModel(lead.carNumber) || "N/A"}
                         </span>
                       </td>
 
@@ -909,7 +1143,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                       {/* 6. CX Name */}
                       <td>
                         <span className="cust-name">
-                          {lead.customerName}
+                          {formatCustomerName(lead.customerName)}
                         </span>
                       </td>
 
@@ -1004,7 +1238,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                             className="btn-action btn-action-delete"
                             title="Delete Lead"
                             aria-label="Delete Lead"
-                            onClick={() => handleDeleteLead(lead._id, lead.appointmentId)}
+                            onClick={() => handleRequestDeleteLead(lead._id, lead.appointmentId)}
                           >
                             <TrashIcon />
                           </button>
@@ -1012,11 +1246,11 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                       </td>
                     </tr>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Pagination */}
         {totalPages > 1 && (
@@ -1061,7 +1295,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
             <div className="modal-header" style={{ padding: "12px 20px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <span className="badge badge-blue" style={{ fontSize: "11px", fontWeight: 700 }}>
-                  {editLead ? editLead.appointmentId : "NEW LEAD"}
+                  {formData.appointmentId || (editLead ? editLead.appointmentId : "NEW LEAD")}
                 </span>
                 <h3 style={{ fontSize: "16px", fontWeight: 700, margin: 0 }}>
                   {editLead ? `Edit Customer Lead` : "Add New Customer Lead"}
@@ -1077,44 +1311,61 @@ const CustomersPage = ({ defaultTab = "all" }) => {
 
             <form onSubmit={handleSaveLead} noValidate>
               <div className="modal-body modal-body-compact">
-                {/* 1. Customer & Vehicle Details (Row 1) */}
+                {/* 1. Customer & Vehicle Information */}
                 <div className="compact-section-box">
                   <div className="compact-section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: "7px" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                       <span>1. Customer &amp; Vehicle Information</span>
                     </div>
                     <span
                       style={{
-                        fontSize: "10.5px",
+                        fontSize: "11px",
                         fontWeight: 700,
-                        textTransform: "uppercase",
                         letterSpacing: "0.03em",
                         color: formData.verificationStatus === "Verified" ? "#16a34a" : "#64748b",
                         background: formData.verificationStatus === "Verified" ? "#dcfce7" : "#f1f5f9",
                         border: formData.verificationStatus === "Verified" ? "1px solid #bbf7d0" : "1px solid #e2e8f0",
-                        padding: "2px 8px",
+                        padding: "2px 9px",
                         borderRadius: "12px",
                         display: "inline-flex",
                         alignItems: "center",
-                        gap: "4px"
+                        gap: "5px"
                       }}
                     >
                       <span style={{ width: 6, height: 6, borderRadius: "50%", background: formData.verificationStatus === "Verified" ? "#16a34a" : "#94a3b8" }}></span>
                       {formData.verificationStatus === "Verified" ? "Verified" : "Pending"}
                     </span>
                   </div>
-                  <div
-                    className="compact-grid-4 compact-grid-5"
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1.25fr 1.15fr 1.15fr 0.95fr 1.1fr",
-                      gap: "10px",
-                      alignItems: "flex-start"
-                    }}
-                  >
+
+                  <div className="compact-grid-3">
+                    {/* Row 1: Identity & Contact */}
                     <div className="form-group">
-                      <label className="form-label">CX Name (Customer Name) *</label>
+                      <label className="form-label" title="Manual Appointment ID (Leave blank to auto-generate)">
+                        Appointment ID <span style={{ fontSize: "10.5px", fontWeight: 400, color: "var(--text-muted)" }}>(Manual / Auto)</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. AP-12345 (Auto if blank)"
+                        value={formData.appointmentId}
+                        onChange={(e) => {
+                          const val = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "");
+                          setFormData({ ...formData, appointmentId: val });
+                        }}
+                        onBlur={(e) => {
+                          let val = (e.target.value || "").trim().toUpperCase();
+                          if (val && !val.startsWith("AP-")) {
+                            val = `AP-${val.replace(/^AP-?/, "")}`;
+                          }
+                          setFormData({ ...formData, appointmentId: val });
+                        }}
+                        style={{ textTransform: "uppercase", fontWeight: 600, letterSpacing: "0.02em" }}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Customer Name <span style={{ color: "#ef4444" }}>*</span></label>
                       <input
                         type="text"
                         className={`form-control ${formErrors.customerName ? "is-invalid" : ""}`}
@@ -1122,8 +1373,15 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                         required
                         value={formData.customerName}
                         onChange={(e) => {
-                          setFormData({ ...formData, customerName: e.target.value });
+                          const raw = e.target.value;
+                          const formatted = raw.replace(/\b([a-zA-Z])/g, (c) => c.toUpperCase());
+                          setFormData({ ...formData, customerName: formatted });
                           if (formErrors.customerName) setFormErrors((prev) => ({ ...prev, customerName: "" }));
+                        }}
+                        onBlur={() => {
+                          if (formData.customerName) {
+                            setFormData((prev) => ({ ...prev, customerName: formatCustomerName(prev.customerName) }));
+                          }
                         }}
                       />
                       {formErrors.customerName && (
@@ -1132,15 +1390,19 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">Cx Mobile No. *</label>
+                      <label className="form-label">Cx Mobile No. <span style={{ color: "#ef4444" }}>*</span></label>
                       <input
-                        type="text"
+                        type="tel"
+                        maxLength={10}
                         className={`form-control ${formErrors.mobile ? "is-invalid" : ""}`}
                         placeholder="e.g. 9876543210"
                         required
                         value={formData.mobile}
                         onChange={(e) => {
-                          setFormData({ ...formData, mobile: e.target.value });
+                          let val = e.target.value.replace(/\D/g, "");
+                          if (val.startsWith("91") && val.length > 10) val = val.slice(2);
+                          val = val.slice(0, 10);
+                          setFormData({ ...formData, mobile: val });
                           if (formErrors.mobile) setFormErrors((prev) => ({ ...prev, mobile: "" }));
                         }}
                       />
@@ -1149,31 +1411,48 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                       )}
                     </div>
 
+                    {/* Row 2: Vehicle & Verification */}
                     <div className="form-group">
                       <label className="form-label">Car Reg No. / Model</label>
                       <input
                         type="text"
                         className="form-control"
-                        placeholder="e.g. DL-01-AB-1234 / City"
+                        placeholder="e.g. DL-01-AB-1234 / Honda City"
                         value={formData.carNumber}
-                        onChange={(e) => setFormData({ ...formData, carNumber: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (e.nativeEvent && e.nativeEvent.inputType && e.nativeEvent.inputType.startsWith("delete")) {
+                            setFormData({ ...formData, carNumber: val.toUpperCase() });
+                            return;
+                          }
+                          setFormData({ ...formData, carNumber: formatCarRegAndModel(val, false) });
+                        }}
+                        onBlur={() => {
+                          if (formData.carNumber) {
+                            setFormData({ ...formData, carNumber: formatCarRegAndModel(formData.carNumber, true) });
+                          }
+                        }}
+                        style={{ fontWeight: 600, letterSpacing: "0.02em" }}
                       />
                     </div>
 
                     <div className="form-group">
                       <label className="form-label">Oddo Meter / KM</label>
                       <input
-                        type="number"
+                        type="text"
                         className="form-control"
                         placeholder="e.g. 45000"
                         value={formData.odometerKm}
-                        onChange={(e) => setFormData({ ...formData, odometerKm: e.target.value })}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, "");
+                          setFormData({ ...formData, odometerKm: digits });
+                        }}
                       />
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">LEAD VERIFIED</label>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", height: "35px" }}>
+                      <label className="form-label">Lead Verification</label>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", height: "38px" }}>
                         <label
                           className="yn-switch yn-switch-lg"
                           title={formData.verificationStatus === "Verified" ? "Verified — click to set Pending" : "Pending — click to set Verified"}
@@ -1199,7 +1478,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                             fontWeight: 700,
                             letterSpacing: "0.03em",
                             color: formData.verificationStatus === "Verified" ? "#16a34a" : "#64748b",
-                            padding: "2px 7px",
+                            padding: "3px 9px",
                             borderRadius: "10px",
                             background: formData.verificationStatus === "Verified" ? "#dcfce7" : "#f1f5f9",
                             border: formData.verificationStatus === "Verified" ? "1px solid #bbf7d0" : "1px solid #e2e8f0"
@@ -1212,37 +1491,31 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                   </div>
                 </div>
 
-                {/* 2. Appointment & Assignment (Row 2) */}
+                {/* 2. Appointment & Assignment */}
                 <div className="compact-section-box">
                   <div className="compact-section-title">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                     <span>2. Appointment &amp; Assignment</span>
                   </div>
                   <div className="compact-grid-4">
                     <div className="form-group">
                       <label className="form-label">Lead Date</label>
-                      <div className="styled-picker-wrap">
-                        <span className="picker-icon"><CalendarIcon /></span>
-                        <input
-                          type="date"
-                          className="form-control"
-                          value={formData.leadDate}
-                          onChange={(e) => setFormData({ ...formData, leadDate: e.target.value })}
-                        />
-                      </div>
+                      <CustomDateTimePicker
+                        mode="date"
+                        value={formData.leadDate}
+                        onChange={(val) => setFormData({ ...formData, leadDate: val })}
+                        placeholder="Select lead date"
+                      />
                     </div>
 
                     <div className="form-group">
                       <label className="form-label">Appointment Date &amp; Time</label>
-                      <div className="styled-picker-wrap">
-                        <span className="picker-icon"><ClockIcon /></span>
-                        <input
-                          type="datetime-local"
-                          className="form-control"
-                          value={formData.appointmentDate}
-                          onChange={(e) => setFormData({ ...formData, appointmentDate: e.target.value })}
-                        />
-                      </div>
+                      <CustomDateTimePicker
+                        mode="datetime"
+                        value={formData.appointmentDate}
+                        onChange={(val) => setFormData({ ...formData, appointmentDate: val })}
+                        placeholder="Select date &amp; time"
+                      />
                     </div>
 
                     <div className="form-group">
@@ -1285,29 +1558,26 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                   </div>
                 </div>
 
-                {/* 3. Follow-up, Verification & Remarks (Row 3) */}
+                {/* 3. Follow-up & Inspection Notes */}
                 <div className="compact-section-box">
                   <div className="compact-section-title">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                    <span>3. Follow-up, Verification &amp; Inspection Notes</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    <span>3. Follow-up &amp; Inspection Notes</span>
                   </div>
                   <div className="compact-grid-4">
                     <div className="form-group">
                       <label className="form-label">Date of Follow-up</label>
-                      <div className="styled-picker-wrap">
-                        <span className="picker-icon"><CalendarIcon /></span>
-                        <input
-                          type="date"
-                          className="form-control"
-                          value={formData.followUpDate}
-                          onChange={(e) => setFormData({ ...formData, followUpDate: e.target.value })}
-                        />
-                      </div>
+                      <CustomDateTimePicker
+                        mode="date"
+                        value={formData.followUpDate}
+                        onChange={(val) => setFormData({ ...formData, followUpDate: val })}
+                        placeholder="Select follow-up date"
+                      />
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">DEAL / CONVERTED</label>
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px", paddingTop: "4px" }}>
+                      <label className="form-label">Deal / Converted</label>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", height: "38px" }}>
                         <label className="yn-switch yn-switch-lg" title="Toggle Lead Converted vs Follow-up Required">
                           <input
                             type="checkbox"
@@ -1321,8 +1591,19 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                             <span className="yn-label-no">No</span>
                           </span>
                         </label>
-                        <span style={{ fontSize: "12.5px", fontWeight: 700, color: formData.followUp === "Converted" ? "#0284c7" : "#64748b" }}>
-                          {formData.followUp === "Converted" ? "✓ Converted" : "⏳ Follow-up"}
+                        <span
+                          style={{
+                            fontSize: "11.5px",
+                            fontWeight: 700,
+                            letterSpacing: "0.02em",
+                            color: formData.followUp === "Converted" ? "#0284c7" : "#64748b",
+                            padding: "3px 9px",
+                            borderRadius: "10px",
+                            background: formData.followUp === "Converted" ? "#e0f2fe" : "#f1f5f9",
+                            border: formData.followUp === "Converted" ? "1px solid #bae6fd" : "1px solid #e2e8f0"
+                          }}
+                        >
+                          {formData.followUp === "Converted" ? "✓ CONVERTED" : "⏳ FOLLOW-UP"}
                         </span>
                       </div>
                     </div>
@@ -1332,7 +1613,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                       <input
                         type="text"
                         className="form-control"
-                        placeholder="Customer expectations, valuation offer, evaluation notes..."
+                        placeholder="Enter customer expectations, valuation offer, evaluation notes..."
                         value={formData.remark}
                         onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
                       />
@@ -1370,9 +1651,9 @@ const CustomersPage = ({ defaultTab = "all" }) => {
           <div className="drawer-card" onClick={(e) => e.stopPropagation()}>
             <div className="drawer-header">
               <div>
-                <span className="appointment-id-pill">{activeDrawer.appointmentId}</span>
+                <span className="appointment-id-pill">{formatAptId(activeDrawer.appointmentId)}</span>
                 <h3 style={{ marginTop: "4px", fontSize: "18px", fontWeight: 700 }}>
-                  {activeDrawer.customerName}
+                  {formatCustomerName(activeDrawer.customerName)}
                 </h3>
               </div>
               <button className="modal-close-btn" onClick={() => setActiveDrawer(null)}>
@@ -1434,7 +1715,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                 <div className="detail-label-val">
                   <span className="detail-label">Car Reg Number</span>
                   <div className="detail-value">
-                    <span className="car-number-badge">{activeDrawer.carNumber || "N/A"}</span>
+                    <span className="car-number-badge">{formatCarRegAndModel(activeDrawer.carNumber) || "N/A"}</span>
                   </div>
                 </div>
 
@@ -1545,6 +1826,18 @@ const CustomersPage = ({ defaultTab = "all" }) => {
         ]}
         requiredHeaders={["CX Name", "Cx Mobile No."]}
         onImport={handleImportCustomers}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(deleteConfirmLead)}
+        title={`Delete Lead ${deleteConfirmLead?.aptId || ""}`}
+        message={`Are you sure you want to delete lead ${deleteConfirmLead?.aptId || "this lead"}? This action cannot be undone and will permanently remove the lead dossier.`}
+        confirmText="Delete Lead"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteConfirmLead(null)}
       />
     </div>
   );

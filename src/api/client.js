@@ -7,7 +7,8 @@ const API_BASE_URL = typeof window !== "undefined"
 export const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
 
 export const api = axios.create({
-  baseURL: API_BASE_URL
+  baseURL: API_BASE_URL,
+  timeout: 25000
 });
 
 export const toAbsoluteAssetUrl = (assetPath = "") => {
@@ -17,11 +18,23 @@ export const toAbsoluteAssetUrl = (assetPath = "") => {
   return `${API_ORIGIN}${normalized}`;
 };
 
-// In-flight deduplication and short-TTL response cache for ultra-fast loading
+// In-flight deduplication and Stale-While-Revalidate (SWR) cache for ultra-fast page switching
 const inflightGetRequests = new Map();
 const getResponseCache = new Map();
-const CACHE_TTL_MS = 2500; // 2.5 seconds cache for instant tab transitions
+const DEFAULT_FRESH_TTL_MS = 30000; // 30 seconds completely fresh
+const MASTER_DATA_TTL_MS = 300000;  // 5 minutes for master data / static lists
+const MAX_STALE_TTL_MS = 300000;    // 5 minutes stale-while-revalidate window
 let cacheEpoch = Date.now();
+
+const isMasterDataUrl = (url = "") => {
+  return (
+    url.includes("/departments") ||
+    url.includes("/branches") ||
+    url.includes("/employees-list") ||
+    url.includes("/performance-settings") ||
+    url.includes("/users")
+  );
+};
 
 // Cross-tab and cross-component real-time event bus
 const syncListeners = new Set();
@@ -80,7 +93,7 @@ export const onDataSync = (callback) => {
   };
 };
 
-// Override api.get to implement deduplication and micro-caching
+// Override api.get to implement deduplication and Stale-While-Revalidate micro-caching
 const originalGet = api.get.bind(api);
 api.get = function (url, config = {}) {
   // If skipCache, forceRefresh, or responseType is blob/stream, pass through directly
@@ -92,22 +105,49 @@ api.get = function (url, config = {}) {
   const tokenSignature = currentToken.slice(-16);
   const cacheKey = `${tokenSignature}__${url}__${JSON.stringify(config?.params || {})}`;
 
-  // Check recent cached response
   const cached = getResponseCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-    return Promise.resolve(cached.response);
+  const now = Date.now();
+  const freshTtl = isMasterDataUrl(url) ? MASTER_DATA_TTL_MS : DEFAULT_FRESH_TTL_MS;
+
+  if (cached) {
+    const age = now - cached.timestamp;
+    // 1. Fresh: Instant response, no network hit
+    if (age < freshTtl) {
+      return Promise.resolve(cached.response);
+    }
+    // 2. Stale-While-Revalidate: Instant response from cache, refresh in background
+    if (age < MAX_STALE_TTL_MS) {
+      if (!inflightGetRequests.has(cacheKey)) {
+        const bgStart = Date.now();
+        const revalidatePromise = originalGet(url, config)
+          .then((freshRes) => {
+            if (bgStart >= cacheEpoch) {
+              getResponseCache.set(cacheKey, { timestamp: Date.now(), response: freshRes });
+            }
+            return freshRes;
+          })
+          .catch((err) => {
+            // Silently retain cached version on background revalidate error
+            console.warn("Background revalidate warning for", url, err?.message);
+          })
+          .finally(() => {
+            inflightGetRequests.delete(cacheKey);
+          });
+        inflightGetRequests.set(cacheKey, revalidatePromise);
+      }
+      return Promise.resolve(cached.response);
+    }
   }
 
-  // Check if identical request is currently in-flight
+  // 3. Check if identical request is currently in-flight
   if (inflightGetRequests.has(cacheKey)) {
     return inflightGetRequests.get(cacheKey);
   }
 
-  // Dispatch new request and track promise
+  // 4. Dispatch new request and track promise
   const requestStart = Date.now();
   const requestPromise = originalGet(url, config)
     .then((response) => {
-      // Only cache if no mutation/cache invalidation occurred while this request was in flight
       if (requestStart >= cacheEpoch) {
         getResponseCache.set(cacheKey, {
           timestamp: Date.now(),
@@ -153,7 +193,22 @@ api.interceptors.response.use(
     }
     return res;
   },
-  (err) => {
+  async (err) => {
+    const config = err.config;
+
+    // Auto-retry transient network errors once for GET requests
+    const isNetworkError =
+      err.code === "ERR_NETWORK" ||
+      err.message === "Network Error" ||
+      err.code === "ECONNABORTED" ||
+      (!err.response && !axios.isCancel(err));
+
+    if (config && !config.__isRetry && isNetworkError && (config.method || "get").toLowerCase() === "get") {
+      config.__isRetry = true;
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      return api(config);
+    }
+
     if (typeof window !== "undefined") {
       const isLoginRequest = err.config?.url?.includes("/auth/login");
       // Only 401 (Unauthorized / expired token) should clear the session, NEVER 403 (Forbidden)

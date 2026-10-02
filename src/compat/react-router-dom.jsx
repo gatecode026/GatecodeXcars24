@@ -66,17 +66,17 @@ export const useParams = () => {
   return params || {};
 };
 
-export const Link = React.forwardRef(({ to, href, children, ...props }, ref) => {
+export const Link = React.forwardRef(({ to, href, children, prefetch = true, ...props }, ref) => {
   const destination = to || href || "#";
   return (
-    <NextLink ref={ref} href={destination} {...props}>
+    <NextLink ref={ref} href={destination} prefetch={prefetch} {...props}>
       {children}
     </NextLink>
   );
 });
 Link.displayName = "Link";
 
-export const NavLink = React.forwardRef(({ to, href, className, children, ...props }, ref) => {
+export const NavLink = React.forwardRef(({ to, href, className, children, prefetch = true, ...props }, ref) => {
   const pathname = usePathname() || "/";
   const destination = to || href || "";
   const isActive = pathname === destination || (destination !== "/" && pathname.startsWith(destination));
@@ -89,7 +89,7 @@ export const NavLink = React.forwardRef(({ to, href, className, children, ...pro
   }
 
   return (
-    <NextLink ref={ref} href={destination} className={computedClass} {...props}>
+    <NextLink ref={ref} href={destination} prefetch={prefetch} className={computedClass} {...props}>
       {typeof children === "function" ? children({ isActive, isPending: false }) : children}
     </NextLink>
   );
