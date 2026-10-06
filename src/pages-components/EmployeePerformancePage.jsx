@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api, onDataSync } from "../api/client";
 import { exportTableToCsv } from "../utils/csvHelper";
