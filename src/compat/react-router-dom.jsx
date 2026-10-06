@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useCallback } from "react";
-import { usePathname, useRouter, useSearchParams as useNextSearchParams, useParams as useNextParams } from "next/navigation";
+import { usePathname, useRouter, useParams as useNextParams } from "next/navigation";
 import NextLink from "next/link";
 
 export const useNavigate = () => {
@@ -25,9 +25,19 @@ export const useNavigate = () => {
 
 export const useLocation = () => {
   const pathname = usePathname() || "/";
-  const searchParams = useNextSearchParams();
-  const search = searchParams?.toString() ? `?${searchParams.toString()}` : "";
-  const hash = typeof window !== "undefined" ? window.location.hash : "";
+  const [search, setSearch] = React.useState(() => {
+    return typeof window !== "undefined" ? window.location.search : "";
+  });
+  const [hash, setHash] = React.useState(() => {
+    return typeof window !== "undefined" ? window.location.hash : "";
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setSearch(window.location.search);
+      setHash(window.location.hash);
+    }
+  }, [pathname]);
 
   return {
     pathname,
@@ -38,27 +48,40 @@ export const useLocation = () => {
 };
 
 export const useSearchParams = () => {
-  const searchParams = useNextSearchParams();
   const router = useRouter();
   const pathname = usePathname() || "/";
 
+  const [params, setParams] = React.useState(() => {
+    if (typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search);
+    }
+    return new URLSearchParams();
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setParams(new URLSearchParams(window.location.search));
+    }
+  }, [pathname]);
+
   const setSearchParams = useCallback(
     (nextParams) => {
-      let params;
+      let next;
       if (typeof nextParams === "function") {
-        params = nextParams(new URLSearchParams(searchParams ? searchParams.toString() : ""));
+        next = nextParams(new URLSearchParams(params.toString()));
       } else if (nextParams instanceof URLSearchParams) {
-        params = nextParams;
+        next = nextParams;
       } else {
-        params = new URLSearchParams(nextParams);
+        next = new URLSearchParams(nextParams);
       }
-      const qs = params.toString();
+      const qs = next.toString();
+      setParams(next);
       router.replace(`${pathname}${qs ? `?${qs}` : ""}`);
     },
-    [router, pathname, searchParams]
+    [router, pathname, params]
   );
 
-  return [searchParams || new URLSearchParams(), setSearchParams];
+  return [params, setSearchParams];
 };
 
 export const useParams = () => {

@@ -43,22 +43,8 @@ const decodeToken = (token) => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const token = localStorage.getItem("dashboard_token");
-      if (token) return decodeToken(token);
-    } catch {}
-    return null;
-  });
-  const [loading, setLoading] = useState(() => {
-    if (typeof window === "undefined") return true;
-    try {
-      const token = localStorage.getItem("dashboard_token");
-      if (token && decodeToken(token)) return false;
-    } catch {}
-    return false;
-  });
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let token = null;
@@ -70,6 +56,7 @@ export const AuthProvider = ({ children }) => {
       const decoded = decodeToken(token);
       if (decoded) {
         setUser(decoded);
+        api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
         setLoading(false);
         return;
       }

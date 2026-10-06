@@ -6,7 +6,7 @@ import { useAuth } from "../context/AuthContext";
 
 const ProtectedRoute = ({ children, role }) => {
   const { user, loading } = useAuth();
-  const [mounted, setMounted] = useState(() => typeof window !== "undefined");
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
