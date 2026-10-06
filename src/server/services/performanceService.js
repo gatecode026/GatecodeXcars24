@@ -683,6 +683,8 @@ export async function getEmployeeDailyHistory(employeeId, month, year) {
     cur.setDate(cur.getDate() + 1);
   }
 
+  // Sort descending so the latest dates are at the top
+  history.sort((a, b) => new Date(b.date) - new Date(a.date));
   return history;
 }
 

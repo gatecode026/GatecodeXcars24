@@ -23,6 +23,12 @@ export const viewport = {
   initialScale: 1
 };
 
+const GlobalLoadingFallback = () => (
+  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "#f8fafc" }}>
+    <div className="spinner-border" style={{ width: "36px", height: "36px", color: "#0284c7" }} />
+  </div>
+);
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className={inter.className} suppressHydrationWarning>
@@ -48,7 +54,7 @@ export default function RootLayout({ children }) {
       </head>
       <body className={inter.className} suppressHydrationWarning>
         <AuthProvider>
-          <Suspense fallback={null}>
+          <Suspense fallback={<GlobalLoadingFallback />}>
             {children}
           </Suspense>
         </AuthProvider>

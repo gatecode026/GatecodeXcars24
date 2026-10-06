@@ -164,7 +164,8 @@ export default function EmployeePerformancePage() {
   const [error, setError] = useState(null);
 
   const fetchData = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+    const isSilent = silent || Boolean(data);
+    if (!isSilent) setLoading(true);
     setError(null);
     try {
       const [perfRes, histRes] = await Promise.all([
@@ -175,11 +176,11 @@ export default function EmployeePerformancePage() {
       setHistory(histRes.data?.data || []);
     } catch (err) {
       console.error("Failed to load employee performance:", err);
-      if (!silent) setError(err.response?.data?.message || "Failed to load employee performance from server.");
+      if (!isSilent) setError(err.response?.data?.message || "Failed to load employee performance from server.");
     } finally {
-      if (!silent) setLoading(false);
+      if (!isSilent) setLoading(false);
     }
-  }, [month, year]);
+  }, [month, year, data]);
 
   useEffect(() => {
     fetchData();
@@ -205,9 +206,15 @@ export default function EmployeePerformancePage() {
   const sales = m?.sales;
   const perf = m?.performance;
 
+  // Sorted latest first (Today & newest dates on top)
+  const displayHistory = useMemo(() => {
+    if (!history || history.length === 0) return [];
+    return [...history].sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [history]);
+
   // Export Daily Appointment Log to CSV
   const handleExportCSV = () => {
-    if (!history || history.length === 0) return;
+    if (!displayHistory || displayHistory.length === 0) return;
     const headers = [
       "Date",
       "Day",
@@ -217,7 +224,7 @@ export default function EmployeePerformancePage() {
       "Achievement (%)",
       "Status"
     ];
-    const rows = history.map((d) => {
+    const rows = displayHistory.map((d) => {
       const dt = new Date(d.date);
       return [
         dt.toISOString().split("T")[0],
@@ -681,7 +688,7 @@ export default function EmployeePerformancePage() {
                   type="button"
                   className="btn btn-secondary"
                   onClick={handleExportCSV}
-                  disabled={history.length === 0}
+                  disabled={displayHistory.length === 0}
                   title="Export Daily Appointment Log to CSV"
                 >
                   <DownloadIcon />
@@ -704,14 +711,14 @@ export default function EmployeePerformancePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {history.length === 0 ? (
+                  {displayHistory.length === 0 ? (
                     <tr>
                       <td colSpan="7" style={{ textAlign: "center", padding: "40px 20px", color: "var(--text-muted)" }}>
                         No daily appointment logs recorded for {MONTHS[month]} {year}.
                       </td>
                     </tr>
                   ) : (
-                    history.map((d, idx) => {
+                    displayHistory.map((d, idx) => {
                       const dt = new Date(d.date);
                       const dayName = dt.toLocaleDateString("en-IN", { weekday: "short" });
                       const dateStr = dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
