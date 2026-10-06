@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 // Clean Line Icons
@@ -53,8 +53,7 @@ const ShieldIcon = () => (
 
 const LoginPage = () => {
   const navigate = useNavigate();
-  const location = useLocation();
-  const { user, login, loading: authLoading } = useAuth();
+  const { user, login } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -74,7 +73,7 @@ const LoginPage = () => {
     }
   }, [user, navigate]);
 
-  if (authLoading || (user && !user.guest)) {
+  if (user && !user.guest) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "#f8fafc" }}>
         <div className="spinner-border" style={{ width: "36px", height: "36px", color: "#0284c7" }} />

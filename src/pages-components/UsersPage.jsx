@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, emitDataSync, onDataSync } from "../api/client";
 import { useAuth } from "../context/AuthContext";
@@ -100,8 +100,13 @@ const UsersPage = () => {
     exportTableToCsv(`Team_Members_${new Date().toISOString().split("T")[0]}.csv`, headers, rows);
   };
 
+  const usersRef = useRef(users);
+  useEffect(() => {
+    usersRef.current = users;
+  }, [users]);
+
   const fetchUsers = useCallback(async (options = {}) => {
-    const isSilent = options?.silent === true || (users && users.length > 0 && !options?.force);
+    const isSilent = options?.silent === true || (usersRef.current && usersRef.current.length > 0 && !options?.force);
     try {
       if (!isSilent) setLoading(true);
       const res = await api.get("/auth/users", options?.force ? { forceRefresh: true } : {});
@@ -111,7 +116,7 @@ const UsersPage = () => {
     } finally {
       if (!isSilent) setLoading(false);
     }
-  }, [users]);
+  }, []);
 
   useEffect(() => {
     fetchUsers();
@@ -296,7 +301,7 @@ const UsersPage = () => {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {loading && users.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ textAlign: "center", padding: "48px 24px", color: "var(--text-muted)" }}>
                     <div style={{ display: "inline-flex", alignItems: "center", gap: "10px" }}>

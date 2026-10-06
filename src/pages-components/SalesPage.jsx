@@ -277,7 +277,7 @@ const SalesPage = () => {
         </div>
       </div>
 
-      {loading ? (
+      {loading && !data ? (
         <div className="table-card" style={{ padding: "60px 24px", textAlign: "center", color: "var(--text-muted)" }}>
           <div className="spinner-border" style={{ marginBottom: "12px" }} />
           <div>Loading sales summary...</div>

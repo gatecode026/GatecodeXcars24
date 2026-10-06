@@ -25,12 +25,8 @@ export const useNavigate = () => {
 
 export const useLocation = () => {
   const pathname = usePathname() || "/";
-  const [search, setSearch] = React.useState(() => {
-    return typeof window !== "undefined" ? window.location.search : "";
-  });
-  const [hash, setHash] = React.useState(() => {
-    return typeof window !== "undefined" ? window.location.hash : "";
-  });
+  const [search, setSearch] = React.useState("");
+  const [hash, setHash] = React.useState("");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -50,13 +46,7 @@ export const useLocation = () => {
 export const useSearchParams = () => {
   const router = useRouter();
   const pathname = usePathname() || "/";
-
-  const [params, setParams] = React.useState(() => {
-    if (typeof window !== "undefined") {
-      return new URLSearchParams(window.location.search);
-    }
-    return new URLSearchParams();
-  });
+  const [params, setParams] = React.useState(() => new URLSearchParams());
 
   useEffect(() => {
     if (typeof window !== "undefined") {

@@ -176,7 +176,7 @@ const RevenuePage = () => {
         )}
       </div>
 
-      {loading ? (
+      {loading && !revenue ? (
         <p style={{ color: "var(--text-muted)", textAlign: "center", marginTop: 40 }}>Loading revenue data...</p>
       ) : !revenue ? (
         <p style={{ color: "var(--text-muted)", textAlign: "center", marginTop: 40 }}>Could not load revenue data.</p>

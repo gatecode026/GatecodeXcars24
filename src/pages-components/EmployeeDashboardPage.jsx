@@ -72,6 +72,7 @@ const EmployeeDashboardPage = () => {
     callingRevenue: 0
   });
   const [loading, setLoading] = useState(true);
+  const [statsLoaded, setStatsLoaded] = useState(false);
   const [filter, setFilter] = useState("today");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -98,6 +99,7 @@ const EmployeeDashboardPage = () => {
         conversionsDone: dData.conversionsDone || 0,
         callingRevenue: dData.callingRevenue || 0
       });
+      setStatsLoaded(true);
     } catch {
       // Keep previous stats on error
     } finally {
@@ -209,7 +211,7 @@ const EmployeeDashboardPage = () => {
           </div>
           <div className="kpi-label">Your Customer Leads</div>
           <div className="kpi-value">
-            {loading ? <span className="skeleton-box" style={{ width: "60px", height: "28px" }} /> : stats.leadCount}
+            {loading && !statsLoaded ? <span className="skeleton-box" style={{ width: "60px", height: "28px" }} /> : stats.leadCount}
           </div>
           <div className="kpi-subtext">
             {filter === "all"
@@ -233,7 +235,7 @@ const EmployeeDashboardPage = () => {
           </div>
           <div className="kpi-label">Calls Done &amp; Connected</div>
           <div className="kpi-value">
-            {loading ? (
+            {loading && !statsLoaded ? (
               <span className="skeleton-box" style={{ width: "80px", height: "28px" }} />
             ) : (
               <span>
@@ -253,7 +255,7 @@ const EmployeeDashboardPage = () => {
           </div>
           <div className="kpi-label">Calling Conversions &amp; Revenue</div>
           <div className="kpi-value">
-            {loading ? (
+            {loading && !statsLoaded ? (
               <span className="skeleton-box" style={{ width: "100px", height: "28px" }} />
             ) : (
               <span>
@@ -273,7 +275,7 @@ const EmployeeDashboardPage = () => {
           </div>
           <div className="kpi-label">Cars Processed</div>
           <div className="kpi-value">
-            {loading ? <span className="skeleton-box" style={{ width: "60px", height: "28px" }} /> : stats.orderCount}
+            {loading && !statsLoaded ? <span className="skeleton-box" style={{ width: "60px", height: "28px" }} /> : stats.orderCount}
           </div>
           <div className="kpi-subtext">Vehicle purchases booked</div>
         </div>
@@ -287,7 +289,7 @@ const EmployeeDashboardPage = () => {
           </div>
           <div className="kpi-label">Returns / Issues</div>
           <div className="kpi-value">
-            {loading ? <span className="skeleton-box" style={{ width: "60px", height: "28px" }} /> : stats.returnCount}
+            {loading && !statsLoaded ? <span className="skeleton-box" style={{ width: "60px", height: "28px" }} /> : stats.returnCount}
           </div>
           <div className="kpi-subtext">Customer complaints or returns</div>
         </div>
@@ -301,7 +303,7 @@ const EmployeeDashboardPage = () => {
           </div>
           <div className="kpi-label">Total Incentive</div>
           <div className="kpi-value">
-            {loading ? (
+            {loading && !statsLoaded ? (
               <span className="skeleton-box" style={{ width: "110px", height: "28px" }} />
             ) : (
               `₹${Number(stats.totalIncentive || 0).toLocaleString("en-IN")}`

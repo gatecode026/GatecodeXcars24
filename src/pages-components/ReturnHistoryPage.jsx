@@ -202,7 +202,7 @@ const ReturnHistoryPage = () => {
         )}
       </div>
 
-      {loading ? (
+      {loading && returns.length === 0 ? (
         <div className="glass-card" style={{ padding: "60px 24px", textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>Loading...</div>
       ) : (
         <DataTable

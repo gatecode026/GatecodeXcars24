@@ -380,7 +380,7 @@ export default function EmployeePerformancePage() {
         </div>
       )}
 
-      {loading ? (
+      {loading && !data ? (
         <div className="table-card" style={{ padding: "60px 24px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>
           <div className="loading-spinner" style={{ marginBottom: "12px" }} />
           <div>Loading your performance metrics...</div>

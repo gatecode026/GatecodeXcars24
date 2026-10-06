@@ -461,8 +461,8 @@ const EmployeeDetailsPage = () => {
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={8} style={{ textAlign: "center", padding: 24, color: "#94a3b8" }}>Loading...</td></tr>}
-              {!loading && filtered.length === 0 && <tr><td colSpan={8} style={{ textAlign: "center", padding: 24, color: "#94a3b8" }}>No employees found</td></tr>}
+              {loading && employees.length === 0 && <tr><td colSpan={8} style={{ textAlign: "center", padding: 24, color: "#94a3b8" }}>Loading...</td></tr>}
+              {(!loading || employees.length > 0) && filtered.length === 0 && <tr><td colSpan={8} style={{ textAlign: "center", padding: 24, color: "#94a3b8" }}>No employees found</td></tr>}
               {filtered.map((emp) => (
                 <tr key={emp._id} style={{ background: selected?._id === emp._id ? "rgba(6,182,212,0.06)" : "transparent" }}>
                   <td style={{ fontWeight: 600 }}>{emp.name || emp.username}</td>

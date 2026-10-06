@@ -448,9 +448,13 @@ const CustomersPage = ({ defaultTab = "all" }) => {
   };
 
   const [employeesList, setEmployeesList] = useState([]);
+  const leadsRef = useRef(leads);
+  useEffect(() => {
+    leadsRef.current = leads;
+  }, [leads]);
 
   const fetchLeads = useCallback(async (options = {}) => {
-    const isSilent = options?.silent === true || (leads && leads.length > 0 && !options?.force);
+    const isSilent = options?.silent === true || (leadsRef.current && leadsRef.current.length > 0 && !options?.force);
     if (!isSilent) setLoading(true);
     try {
       const params = {};
@@ -474,7 +478,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
     } finally {
       if (!isSilent) setLoading(false);
     }
-  }, [dateType, period, fromDate, toDate, statusFilter, leadByFilter, searchDebounced, leads?.length]);
+  }, [dateType, period, fromDate, toDate, statusFilter, leadByFilter, searchDebounced]);
 
   // Subscribe to real-time sync across components and open browser tabs
   useEffect(() => {
@@ -1029,7 +1033,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
         </div>
 
         {/* Table / Empty State */}
-        {loading ? (
+        {loading && leads.length === 0 ? (
           <div className="table-empty-state-modern" style={{ border: "none" }}>
             <div className="empty-icon-wrap" style={{ background: "#f0f9ff" }}>
               <ClockIcon />

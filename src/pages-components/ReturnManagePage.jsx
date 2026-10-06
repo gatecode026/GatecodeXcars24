@@ -351,7 +351,7 @@ const ReturnManagePage = () => {
         </div>
       </div>
 
-      {loading ? (
+      {loading && returns.length === 0 ? (
         <div className="table-card" style={{ padding: "60px 24px", textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>
           <div className="loading-spinner" style={{ marginBottom: 12 }} />
           <div>Loading return requests...</div>

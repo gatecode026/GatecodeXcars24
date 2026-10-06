@@ -192,7 +192,7 @@ const ActivityLogsPage = () => {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {loading && logs.length === 0 ? (
                 <tr>
                   <td colSpan="4" style={{ textAlign: "center", padding: "30px" }}>
                     <div className="loading-spinner" /> Loading activity logs...
