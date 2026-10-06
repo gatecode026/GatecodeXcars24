@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { getPdfDoc } from "../utils/pdfExport";
 import { api, emitDataSync, onDataSync } from "../api/client";
 import { useAuth } from "../context/AuthContext";
@@ -379,7 +380,7 @@ export const formatCustomerName = (val) => {
 const CustomersPage = ({ defaultTab = "all" }) => {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
-  const initialSearch = searchParams.get("search") || "";
+  const initialSearch = searchParams?.get ? (searchParams.get("search") || "") : "";
   const tableContainerRef = useRef(null);
 
   const [activeTab, setActiveTab] = useState(defaultTab);

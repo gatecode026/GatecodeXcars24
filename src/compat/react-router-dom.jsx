@@ -76,24 +76,62 @@ export const Link = React.forwardRef(({ to, href, children, prefetch, ...props }
 });
 Link.displayName = "Link";
 
-export const NavLink = React.forwardRef(({ to, href, className, children, prefetch, ...props }, ref) => {
-  const pathname = usePathname() || "/";
-  const destination = to || href || "";
-  const isActive = pathname === destination || (destination !== "/" && pathname.startsWith(destination));
+export const NavLink = React.forwardRef(
+  (
+    {
+      to,
+      href,
+      className,
+      style,
+      children,
+      prefetch,
+      end = false,
+      caseSensitive = false,
+      reloadDocument,
+      ...props
+    },
+    ref
+  ) => {
+    const pathname = usePathname() || "/";
+    const destination = to || href || "";
 
-  let computedClass = "";
-  if (typeof className === "function") {
-    computedClass = className({ isActive, isPending: false });
-  } else {
-    computedClass = `${className || ""} ${isActive ? "active" : ""}`.trim();
+    const normPath = caseSensitive ? pathname : pathname.toLowerCase();
+    const normDest = caseSensitive ? destination : destination.toLowerCase();
+
+    const isExact = normPath === normDest;
+    const isPrefix =
+      !end &&
+      normDest !== "/" &&
+      (normPath.startsWith(normDest.endsWith("/") ? normDest : `${normDest}/`) || normPath === normDest);
+
+    const isActive = end ? isExact : (isExact || isPrefix);
+
+    let computedClass = "";
+    if (typeof className === "function") {
+      computedClass = className({ isActive, isPending: false });
+    } else {
+      computedClass = `${className || ""} ${isActive ? "active" : ""}`.trim();
+    }
+
+    let computedStyle = style;
+    if (typeof style === "function") {
+      computedStyle = style({ isActive, isPending: false });
+    }
+
+    return (
+      <NextLink
+        ref={ref}
+        href={destination}
+        prefetch={prefetch}
+        className={computedClass}
+        style={computedStyle}
+        {...props}
+      >
+        {typeof children === "function" ? children({ isActive, isPending: false }) : children}
+      </NextLink>
+    );
   }
-
-  return (
-    <NextLink ref={ref} href={destination} prefetch={prefetch} className={computedClass} {...props}>
-      {typeof children === "function" ? children({ isActive, isPending: false }) : children}
-    </NextLink>
-  );
-});
+);
 NavLink.displayName = "NavLink";
 
 export const Navigate = ({ to, replace = true }) => {
