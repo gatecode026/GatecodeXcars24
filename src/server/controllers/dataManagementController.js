@@ -23,6 +23,8 @@ export const getDataManagementRecords = async (req, res) => {
     const search = req.query.search || "";
     const logic = req.query.logic || "AND";
     const statusQuickFilter = req.query.statusQuickFilter || "";
+    const batchId = req.query.batchId || null;
+    const viewMode = req.query.viewMode || "active"; // "active" | "archived" | "all"
 
     let filters = [];
     if (req.query.filters) {
@@ -42,17 +44,32 @@ export const getDataManagementRecords = async (req, res) => {
       }
     }
 
-    const query = buildMongoQuery({ search, filters, logic, statusQuickFilter });
+    const query = buildMongoQuery({ search, filters, logic, statusQuickFilter, batchId, viewMode });
     const sortObj = buildMongoSort(sort);
 
-    const [totalRecords, filteredRecords, records] = await Promise.all([
-      DataManagementRecord.countDocuments({ isDeleted: false }),
+    const totalFilter = {
+      isDeleted: false,
+      ...(batchId
+        ? { importBatchId: batchId }
+        : viewMode === "archived"
+        ? { isArchived: true }
+        : viewMode === "all"
+        ? {}
+        : { isArchived: { $ne: true } })
+    };
+
+    const [totalRecords, filteredRecords, records, currentBatchDoc, totalHistoryBatches] = await Promise.all([
+      DataManagementRecord.countDocuments(totalFilter),
       DataManagementRecord.countDocuments(query),
       DataManagementRecord.find(query)
         .sort(sortObj)
         .skip((page - 1) * perPage)
         .limit(perPage)
-        .lean()
+        .lean(),
+      batchId
+        ? DataManagementImportHistory.findById(batchId).lean()
+        : DataManagementImportHistory.findOne({ isCurrentActive: { $ne: false }, status: { $ne: "Failed" } }).sort({ createdAt: -1 }).lean(),
+      DataManagementImportHistory.countDocuments({ status: { $ne: "Failed" } })
     ]);
 
     return res.status(200).json({
@@ -65,6 +82,9 @@ export const getDataManagementRecords = async (req, res) => {
         filtered: filteredRecords,
         totalPages: Math.ceil(filteredRecords / perPage) || 1
       },
+      currentBatch: currentBatchDoc,
+      totalHistoryBatches,
+      viewMode,
       columns: DATA_MANAGEMENT_COLUMNS
     });
   } catch (error) {
@@ -365,7 +385,8 @@ export const importDataManagementRecords = async (req, res) => {
       duplicateHandling = "update", // "update" | "skip" | "create"
       fileName = "data_upload.csv",
       fileSize = 0,
-      columnMapping = {}
+      columnMapping = {},
+      archiveOldTable = true // Default: true (Old table is moved to history with date)
     } = req.body;
 
     if (!Array.isArray(rows) || rows.length === 0) {
@@ -380,13 +401,27 @@ export const importDataManagementRecords = async (req, res) => {
 
     const cleanCols = Object.keys(rows[0] || {}).filter((k) => k !== "__EMPTY" && !k.startsWith("__EMPTY"));
 
-    // 1. Create Import History record in 'Processing' state
+    // If archiving is enabled, move all current active records to history with timestamp
+    const archiveTimestamp = new Date();
+    if (archiveOldTable) {
+      await DataManagementRecord.updateMany(
+        { isDeleted: false, isArchived: { $ne: true } },
+        { $set: { isArchived: true, archivedAt: archiveTimestamp } }
+      );
+      await DataManagementImportHistory.updateMany(
+        { isCurrentActive: true },
+        { $set: { isCurrentActive: false, archivedAt: archiveTimestamp, status: "Archived" } }
+      );
+    }
+
+    // 1. Create Import History record for the new table in 'Processing' state
     const historyDoc = await DataManagementImportHistory.create({
       fileName,
       fileSize,
       totalRows: rows.length,
       duplicateHandling,
       status: "Processing",
+      isCurrentActive: true,
       performedBy: userId,
       performedByName: userName,
       columnsDetected: cleanCols
@@ -493,6 +528,7 @@ export const importDataManagementRecords = async (req, res) => {
         CANCELLED_APPTS: cleanNum(resolveFieldValue(r, "CANCELLED_APPTS", columnMapping)) || 0,
         UNVERIFIED_APPTS: cleanNum(resolveFieldValue(r, "UNVERIFIED_APPTS", columnMapping)) || 0,
 
+        isArchived: false,
         importedAt: new Date(),
         importedBy: userId,
         importBatchId: historyDoc._id,
@@ -563,8 +599,9 @@ export const importDataManagementRecords = async (req, res) => {
       }
     }
 
-    // Update history
+    // Update history record as completed & active
     historyDoc.status = "Completed";
+    historyDoc.isCurrentActive = true;
     historyDoc.insertedCount = insertedCount;
     historyDoc.updatedCount = updatedCount;
     historyDoc.skippedCount = skippedCount;
@@ -617,6 +654,85 @@ export const getDataManagementImportHistory = async (req, res) => {
       .lean();
 
     return res.status(200).json({ success: true, data: history });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ─── 5.1 RESTORE HISTORICAL TABLE TO ACTIVE ──────────────────────────────────
+export const restoreDataManagementHistoryBatch = async (req, res) => {
+  try {
+    await ensureDB();
+    const { batchId } = req.params;
+    const targetBatch = await DataManagementImportHistory.findById(batchId);
+    if (!targetBatch) {
+      return res.status(404).json({ success: false, message: "Historical import snapshot not found" });
+    }
+
+    const restoreTimestamp = new Date();
+
+    // 1. Move currently active table to history with date
+    await DataManagementRecord.updateMany(
+      { isDeleted: false, isArchived: { $ne: true } },
+      { $set: { isArchived: true, archivedAt: restoreTimestamp } }
+    );
+    await DataManagementImportHistory.updateMany(
+      { isCurrentActive: true },
+      { $set: { isCurrentActive: false, archivedAt: restoreTimestamp, status: "Archived" } }
+    );
+
+    // 2. Un-archive the target historical table
+    const restoreRes = await DataManagementRecord.updateMany(
+      { importBatchId: batchId, isDeleted: false },
+      { $set: { isArchived: false, archivedAt: null } }
+    );
+
+    targetBatch.isCurrentActive = true;
+    targetBatch.status = "Completed";
+    targetBatch.archivedAt = null;
+    await targetBatch.save();
+
+    await ActivityLog.create({
+      performedBy: req.user?._id || req.user?.id,
+      performedByName: req.user?.name || "Admin",
+      performedByRole: req.user?.role || "admin",
+      actionType: "DATA_IMPORT_RESTORE",
+      title: "Historical Table Restored to Active",
+      details: `Restored '${targetBatch.fileName}' (imported on ${new Date(targetBatch.createdAt).toLocaleString("en-IN")}) with ${restoreRes.modifiedCount} records.`,
+      metadata: { batchId, restoredCount: restoreRes.modifiedCount }
+    }).catch(() => {});
+
+    return res.status(200).json({
+      success: true,
+      message: `Historical table '${targetBatch.fileName}' (Imported on ${new Date(targetBatch.createdAt).toLocaleDateString("en-IN")}) restored as active table!`,
+      restoredCount: restoreRes.modifiedCount
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ─── 5.2 DELETE HISTORICAL IMPORT BATCH ──────────────────────────────────────
+export const deleteDataManagementHistoryBatch = async (req, res) => {
+  try {
+    await ensureDB();
+    const { batchId } = req.params;
+    const batch = await DataManagementImportHistory.findById(batchId);
+    if (!batch) {
+      return res.status(404).json({ success: false, message: "Historical batch not found" });
+    }
+
+    await DataManagementRecord.updateMany(
+      { importBatchId: batchId },
+      { $set: { isDeleted: true } }
+    );
+
+    await DataManagementImportHistory.findByIdAndDelete(batchId);
+
+    return res.status(200).json({
+      success: true,
+      message: `Historical snapshot '${batch.fileName}' deleted.`
+    });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -707,9 +823,18 @@ export const bulkDeleteDataManagementRecords = async (req, res) => {
 export const exportDataManagementCSV = async (req, res) => {
   try {
     await ensureDB();
-    const { search = "", filters = [], logic = "AND", statusQuickFilter = "", columns = [], sort = {} } = req.body;
+    const {
+      search = "",
+      filters = [],
+      logic = "AND",
+      statusQuickFilter = "",
+      columns = [],
+      sort = {},
+      batchId = req.query.batchId || null,
+      viewMode = req.query.viewMode || "active"
+    } = { ...req.query, ...req.body };
 
-    const query = buildMongoQuery({ search, filters, logic, statusQuickFilter });
+    const query = buildMongoQuery({ search, filters, logic, statusQuickFilter, batchId, viewMode });
     const sortObj = buildMongoSort(sort);
 
     let targetColumns = DATA_MANAGEMENT_COLUMNS;
@@ -767,9 +892,18 @@ export const exportDataManagementCSV = async (req, res) => {
 export const exportDataManagementXLSX = async (req, res) => {
   try {
     await ensureDB();
-    const { search = "", filters = [], logic = "AND", statusQuickFilter = "", columns = [], sort = {} } = req.body;
+    const {
+      search = "",
+      filters = [],
+      logic = "AND",
+      statusQuickFilter = "",
+      columns = [],
+      sort = {},
+      batchId = req.query.batchId || null,
+      viewMode = req.query.viewMode || "active"
+    } = { ...req.query, ...req.body };
 
-    const query = buildMongoQuery({ search, filters, logic, statusQuickFilter });
+    const query = buildMongoQuery({ search, filters, logic, statusQuickFilter, batchId, viewMode });
     const sortObj = buildMongoSort(sort);
 
     let targetColumns = DATA_MANAGEMENT_COLUMNS;
@@ -810,7 +944,7 @@ export const exportDataManagementXLSX = async (req, res) => {
       actionType: "DATA_EXPORT_XLSX",
       title: "Data Management Exported as Excel (XLSX)",
       details: `Exported ${records.length} records with ${targetColumns.length} columns.`,
-      metadata: { recordCount: records.length, format: "xlsx" }
+      metadata: { recordCount: records.length, format: "xlsx", batchId }
     }).catch(() => {});
 
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -826,9 +960,18 @@ export const exportDataManagementXLSX = async (req, res) => {
 export const exportDataManagementPDF = async (req, res) => {
   try {
     await ensureDB();
-    const { search = "", filters = [], logic = "AND", statusQuickFilter = "", columns = [], sort = {} } = req.body;
+    const {
+      search = "",
+      filters = [],
+      logic = "AND",
+      statusQuickFilter = "",
+      columns = [],
+      sort = {},
+      batchId = req.query.batchId || null,
+      viewMode = req.query.viewMode || "active"
+    } = { ...req.query, ...req.body };
 
-    const query = buildMongoQuery({ search, filters, logic, statusQuickFilter });
+    const query = buildMongoQuery({ search, filters, logic, statusQuickFilter, batchId, viewMode });
     const sortObj = buildMongoSort(sort);
 
     // Limit to visible or key columns for readability in PDF landscape format

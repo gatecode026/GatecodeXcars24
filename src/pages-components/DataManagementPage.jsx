@@ -34,8 +34,32 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
-  FilterX
+  FilterX,
+  History,
+  RotateCcw,
+  Archive,
+  Download,
+  Eye
 } from "lucide-react";
+
+// ─── DATE TIME FORMATTER HELPER ───────────────────────────────────────────────
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return "—";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return String(dateStr);
+    return d.toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true
+    });
+  } catch (_) {
+    return String(dateStr);
+  }
+};
 
 // ─── LUCIDE ICON WRAPPERS FOR CLEAN BACKWARD COMPATIBILITY ─────────────────────
 const DatabaseIcon = ({ size = 18 }) => <Database size={size} />;
@@ -209,6 +233,15 @@ export default function DataManagementPage() {
   const [importDuplicateHandling, setImportDuplicateHandling] = useState("update");
   const [importLoading, setImportLoading] = useState(false);
   const [importSummary, setImportSummary] = useState(null);
+  const [archiveOldTableOnImport, setArchiveOldTableOnImport] = useState(true);
+
+  // Historical Tables & Snapshot State
+  const [selectedHistoryBatch, setSelectedHistoryBatch] = useState(null);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [historyBatches, setHistoryBatches] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [currentBatchInfo, setCurrentBatchInfo] = useState(null);
+  const [totalHistoryBatches, setTotalHistoryBatches] = useState(0);
 
   // Saved Views State
   const [savedViews, setSavedViews] = useState([]);
@@ -263,6 +296,23 @@ export default function DataManagementPage() {
     fetchSavedViews();
   }, [fetchSavedViews]);
 
+  // Fetch Import History Batches
+  const fetchHistoryBatches = useCallback(async () => {
+    try {
+      setHistoryLoading(true);
+      const res = await api.get("/data-management/import-history");
+      setHistoryBatches(res.data?.data || []);
+    } catch (err) {
+      console.error("Failed to fetch import history:", err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchHistoryBatches();
+  }, [fetchHistoryBatches]);
+
   const fetchReqIdRef = useRef(0);
 
   // Main Data Fetcher
@@ -286,18 +336,22 @@ export default function DataManagementPage() {
         statusQuickFilter: quickFilter,
         filters: JSON.stringify(filters),
         logic: filterLogic,
-        sort: JSON.stringify({ field: sortField, direction: sortDir })
+        sort: JSON.stringify({ field: sortField, direction: sortDir }),
+        batchId: selectedHistoryBatch?._id || undefined,
+        viewMode: selectedHistoryBatch ? "archived" : "active"
       };
 
       const res = await api.get("/data-management", { params, forceRefresh: options.force === true });
       if (currentReqId !== fetchReqIdRef.current) return;
 
-      const { data, pagination } = res.data;
+      const { data, pagination, currentBatch, totalHistoryBatches: totalBatches } = res.data;
 
       setRecords(data || []);
       setTotalRecords(pagination?.total || 0);
       setFilteredCount(pagination?.filtered || 0);
       setTotalPages(pagination?.totalPages || 1);
+      if (currentBatch) setCurrentBatchInfo(currentBatch);
+      if (typeof totalBatches === "number") setTotalHistoryBatches(totalBatches);
       if (options.page) setPage(options.page);
     } catch (err) {
       if (currentReqId !== fetchReqIdRef.current) return;
@@ -309,7 +363,7 @@ export default function DataManagementPage() {
         setRefreshing(false);
       }
     }
-  }, [page, perPage, debouncedSearch, quickFilter, filters, filterLogic, sortField, sortDir]);
+  }, [page, perPage, debouncedSearch, quickFilter, filters, filterLogic, sortField, sortDir, selectedHistoryBatch]);
 
   useEffect(() => {
     fetchData();
@@ -455,16 +509,87 @@ export default function DataManagementPage() {
         rows: importParsedRows,
         duplicateHandling: importDuplicateHandling,
         fileName: importFile?.name || "import_dataset.xlsx",
-        fileSize: importFile?.size || 0
+        fileSize: importFile?.size || 0,
+        archiveOldTable: archiveOldTableOnImport
       });
 
       setImportSummary(res.data?.summary);
-      setToast({ type: "success", message: res.data?.message || "Import completed successfully!" });
+      setSelectedHistoryBatch(null);
+      setToast({
+        type: "success",
+        message: archiveOldTableOnImport
+          ? "Nayi table import ho gayi! Purani active table date ke sath History me archive kar di gayi hai."
+          : (res.data?.message || "Import completed successfully!")
+      });
       fetchData({ force: true });
+      fetchHistoryBatches();
     } catch (err) {
       setToast({ type: "error", message: err.response?.data?.message || "Import failed." });
     } finally {
       setImportLoading(false);
+    }
+  };
+
+  // ─── HISTORY BATCH ACTIONS ───
+  const handleRestoreBatch = async (batch) => {
+    if (!batch?._id) return;
+    const confirmMsg = `Kya aap sach me "${batch.fileName}" (${formatDateTime(batch.createdAt)}) ko Current Active Table banana chahte hain?\n\nAbhi ki active table history me save ho jayegi aur yeh table active ho jayegi.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      setLoading(true);
+      const res = await api.post(`/data-management/import-history/${batch._id}/restore`);
+      setToast({ type: "success", message: res.data?.message || "Historical table restored to active successfully!" });
+      setSelectedHistoryBatch(null);
+      setIsHistoryModalOpen(false);
+      fetchData({ force: true });
+      fetchHistoryBatches();
+    } catch (err) {
+      console.error("Failed to restore history batch:", err);
+      setToast({ type: "error", message: err.response?.data?.message || "Failed to restore table." });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteBatch = async (batch) => {
+    if (!batch?._id) return;
+    const confirmMsg = `Kya aap sach me historical snapshot "${batch.fileName}" (${formatDateTime(batch.createdAt)}) ko delete karna chahte hain?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await api.delete(`/data-management/import-history/${batch._id}`);
+      setToast({ type: "success", message: "Historical snapshot deleted successfully." });
+      if (selectedHistoryBatch?._id === batch._id) {
+        setSelectedHistoryBatch(null);
+      }
+      fetchHistoryBatches();
+      fetchData({ force: true });
+    } catch (err) {
+      console.error("Failed to delete history batch:", err);
+      setToast({ type: "error", message: err.response?.data?.message || "Failed to delete historical snapshot." });
+    }
+  };
+
+  const handleDownloadBatchCSV = async (batch) => {
+    if (!batch?._id) return;
+    try {
+      setToast({ type: "info", message: `Downloading CSV for ${batch.fileName}...` });
+      const res = await api.get(`/data-management/export/csv?batchId=${batch._id}&columns=all`, { responseType: "blob" });
+      const blob = new Blob([res.data], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const cleanName = (batch.fileName || "dataset").replace(/\.[^/.]+$/, "");
+      link.download = `History_${cleanName}_${new Date(batch.createdAt).toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setToast({ type: "success", message: "CSV download completed!" });
+    } catch (err) {
+      console.error("Failed to download batch CSV:", err);
+      setToast({ type: "error", message: "Failed to download batch CSV." });
     }
   };
 
@@ -622,6 +747,28 @@ export default function DataManagementPage() {
           <button
             type="button"
             className="btn btn-secondary btn-sm"
+            onClick={() => {
+              fetchHistoryBatches();
+              setIsHistoryModalOpen(true);
+            }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              background: selectedHistoryBatch ? "#fef3c7" : undefined,
+              borderColor: selectedHistoryBatch ? "#f59e0b" : undefined,
+              color: selectedHistoryBatch ? "#b45309" : undefined,
+              fontWeight: 600
+            }}
+            title="Imported Tables History with Date & Time"
+          >
+            <Clock size={15} />
+            <span>Table History {totalHistoryBatches > 0 ? `(${totalHistoryBatches})` : ""}</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
             onClick={() => setIsExportModalOpen(true)}
             style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
           >
@@ -670,6 +817,147 @@ export default function DataManagementPage() {
           </button>
         </div>
       </div>
+
+      {/* ── ACTIVE / HISTORICAL TABLE STATUS BANNER ── */}
+      {selectedHistoryBatch ? (
+        <div
+          style={{
+            marginBottom: "16px",
+            padding: "14px 18px",
+            background: "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
+            border: "1px solid #fde68a",
+            borderRadius: "10px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "12px",
+            boxShadow: "0 2px 8px rgba(245, 158, 11, 0.12)"
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: "#f59e0b", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Archive size={20} />
+            </div>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                <span style={{ fontSize: "14px", fontWeight: 700, color: "#92400e" }}>
+                  Viewing Historical Table Snapshot
+                </span>
+                <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "12px", background: "#fef3c7", color: "#b45309", border: "1px solid #fcd34d" }}>
+                  Archived / Purani Table
+                </span>
+                <span style={{ fontSize: "11px", color: "#78350f" }}>
+                  (Read-Only View)
+                </span>
+              </div>
+              <div style={{ fontSize: "12px", color: "#78350f", marginTop: "3px" }}>
+                File: <strong>{selectedHistoryBatch.fileName}</strong> • Imported: <strong>{formatDateTime(selectedHistoryBatch.createdAt)}</strong>
+                {selectedHistoryBatch.archivedAt && (
+                  <span> • Archived: <strong>{formatDateTime(selectedHistoryBatch.archivedAt)}</strong></span>
+                )}
+                <span> • Total Snapshot Rows: <strong>{(selectedHistoryBatch.totalRows || totalRecords).toLocaleString("en-IN")}</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => handleRestoreBatch(selectedHistoryBatch)}
+              style={{
+                background: "#16a34a",
+                color: "#fff",
+                border: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                fontWeight: 600,
+                padding: "6px 14px",
+                borderRadius: "6px",
+                cursor: "pointer"
+              }}
+              title="Is historical table ko wapas current active table banayein"
+            >
+              <RotateCcw size={14} />
+              <span>Restore to Active Table</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => handleDownloadBatchCSV(selectedHistoryBatch)}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              title="Download this snapshot as CSV"
+            >
+              <Download size={14} />
+              <span>Download CSV</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setSelectedHistoryBatch(null)}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              <ArrowRight size={14} style={{ transform: "rotate(180deg)" }} />
+              <span>Back to Active Table</span>
+            </button>
+          </div>
+        </div>
+      ) : currentBatchInfo ? (
+        <div
+          style={{
+            marginBottom: "14px",
+            padding: "8px 16px",
+            background: "#f0fdf4",
+            border: "1px solid #bbf7d0",
+            borderRadius: "8px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "10px",
+            fontSize: "12px",
+            color: "#166534"
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#22c55e", display: "inline-block", boxShadow: "0 0 0 3px rgba(34, 197, 94, 0.2)" }} />
+            <span>
+              <strong>Current Active Table:</strong> {currentBatchInfo.fileName || "Live Operational Dataset"}
+            </span>
+            <span style={{ color: "#15803d" }}>•</span>
+            <span>
+              Imported on: <strong>{formatDateTime(currentBatchInfo.createdAt)}</strong>
+            </span>
+            {currentBatchInfo.performedByName && (
+              <>
+                <span style={{ color: "#15803d" }}>•</span>
+                <span>By: <strong>{currentBatchInfo.performedByName}</strong></span>
+              </>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              fetchHistoryBatches();
+              setIsHistoryModalOpen(true);
+            }}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#15803d",
+              textDecoration: "underline",
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: "12px",
+              padding: 0
+            }}
+          >
+            View Past Table History ({totalHistoryBatches}) →
+          </button>
+        </div>
+      ) : null}
 
       {/* ── 2. METRICS & KPI STRIP ── */}
       <div
@@ -2509,6 +2797,44 @@ export default function DataManagementPage() {
                     </select>
                   </div>
 
+                  {/* Archive Old Table to History Option */}
+                  <div
+                    style={{
+                      background: "#eff6ff",
+                      border: "1px solid #bfdbfe",
+                      borderRadius: "8px",
+                      padding: "12px 14px",
+                      marginBottom: "16px",
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "10px"
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      id="archive-old-table-chk"
+                      checked={archiveOldTableOnImport}
+                      onChange={(e) => setArchiveOldTableOnImport(e.target.checked)}
+                      style={{
+                        width: "18px",
+                        height: "18px",
+                        marginTop: "2px",
+                        cursor: "pointer",
+                        accentColor: "#0284c7"
+                      }}
+                    />
+                    <label htmlFor="archive-old-table-chk" style={{ cursor: "pointer", fontSize: "13px", color: "#1e3a8a", margin: 0, lineHeight: 1.4 }}>
+                      <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: "6px" }}>
+                        <Clock size={14} style={{ color: "#0284c7" }} />
+                        <span>Purani Active Table ko History me save karein (With Date &amp; Time)</span>
+                        <span style={{ fontSize: "11px", background: "#dbeafe", color: "#1d4ed8", padding: "1px 6px", borderRadius: "4px" }}>Recommended</span>
+                      </div>
+                      <div style={{ fontSize: "12px", color: "#3b82f6", marginTop: "3px" }}>
+                        New table import hote hi purani table timestamp ke sath History me archive ho jayegi. Aap use kabhi bhi History me jakar date ke sath dekh ya restore kar sakte hain.
+                      </div>
+                    </label>
+                  </div>
+
                   {/* Warnings if any */}
                   {importValidation.warnings?.length > 0 && (
                     <div style={{ background: "#fefce8", border: "1px solid #fef08a", borderRadius: "8px", padding: "12px", marginBottom: "16px" }}>
@@ -2820,6 +3146,238 @@ export default function DataManagementPage() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 12. IMPORTED TABLES HISTORY MODAL ── */}
+      {isHistoryModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.55)",
+            backdropFilter: "blur(3px)",
+            zIndex: 99999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px"
+          }}
+          onClick={() => setIsHistoryModalOpen(false)}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "920px",
+              background: "#ffffff",
+              borderRadius: "14px",
+              boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
+              display: "flex",
+              flexDirection: "column",
+              maxHeight: "88vh",
+              overflow: "hidden"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ padding: "16px 22px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f8fafc" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: "#e0f2fe", color: "#0284c7", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Clock size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: "17px", fontWeight: 700, margin: 0, color: "#0f172a" }}>
+                    Table Import History (Purani Tables ka Itihas)
+                  </h3>
+                  <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#64748b" }}>
+                    Purani tables date aur time ke sath history me archived hain. Aap kisi bhi snapshot ko view ya restore kar sakte hain.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsHistoryModalOpen(false)}
+                title="Close"
+                style={{ background: "#f1f5f9", border: "none", borderRadius: "50%", width: "30px", height: "30px", cursor: "pointer", color: "#64748b", display: "flex", alignItems: "center", justifyContent: "center" }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px" }}>
+              {historyLoading ? (
+                <div style={{ textAlign: "center", padding: "40px 0", color: "#64748b" }}>
+                  <Loader2 size={24} style={{ animation: "spin 0.8s linear infinite", margin: "0 auto 10px" }} />
+                  <p style={{ margin: 0, fontSize: "13px" }}>Loading table history...</p>
+                </div>
+              ) : historyBatches.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px 20px", color: "#64748b" }}>
+                  <Archive size={36} style={{ color: "#94a3b8", margin: "0 auto 12px" }} />
+                  <h4 style={{ fontSize: "15px", fontWeight: 700, color: "#334155", margin: "0 0 6px" }}>
+                    No Table History Available
+                  </h4>
+                  <p style={{ fontSize: "13px", color: "#64748b", margin: 0 }}>
+                    Nayi spreadsheet import karne par purani table automatically history me save ho jayegi.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {historyBatches.map((batch) => {
+                    const isActive = batch.isCurrentActive === true;
+                    const isCurrentlyViewing = selectedHistoryBatch?._id === batch._id;
+
+                    return (
+                      <div
+                        key={batch._id}
+                        style={{
+                          border: isCurrentlyViewing ? "2px solid #f59e0b" : isActive ? "1.5px solid #86efac" : "1px solid #e2e8f0",
+                          borderRadius: "10px",
+                          padding: "14px 16px",
+                          background: isCurrentlyViewing ? "#fffbeb" : isActive ? "#f0fdf4" : "#ffffff",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          gap: "12px",
+                          transition: "all 0.15s ease"
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: "260px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "4px" }}>
+                            <span style={{ fontWeight: 700, fontSize: "14px", color: "#0f172a" }}>
+                              {batch.fileName || "Imported Dataset"}
+                            </span>
+                            {isActive ? (
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", background: "#dcfce7", color: "#15803d", border: "1px solid #86efac", padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 700 }}>
+                                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#22c55e" }} />
+                                Current Active Table
+                              </span>
+                            ) : (
+                              <span style={{ background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 600 }}>
+                                Archived in History
+                              </span>
+                            )}
+                            {isCurrentlyViewing && (
+                              <span style={{ background: "#fef3c7", color: "#b45309", border: "1px solid #fcd34d", padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 700 }}>
+                                Currently Viewing
+                              </span>
+                            )}
+                          </div>
+
+                          <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", fontSize: "12px", color: "#64748b" }}>
+                            <span>
+                              Import Date: <strong style={{ color: "#334155" }}>{formatDateTime(batch.createdAt)}</strong>
+                            </span>
+                            {batch.archivedAt && (
+                              <span>
+                                Archived Date: <strong style={{ color: "#334155" }}>{formatDateTime(batch.archivedAt)}</strong>
+                              </span>
+                            )}
+                            <span>
+                              Rows: <strong style={{ color: "#334155" }}>{(batch.totalRows || 0).toLocaleString("en-IN")}</strong>
+                            </span>
+                            {batch.performedByName && (
+                              <span>
+                                By: <strong style={{ color: "#334155" }}>{batch.performedByName}</strong>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                          {isActive && !isCurrentlyViewing ? (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => {
+                                setSelectedHistoryBatch(null);
+                                setIsHistoryModalOpen(false);
+                              }}
+                              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                            >
+                              <Eye size={13} />
+                              <span>View Active</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              onClick={() => {
+                                setSelectedHistoryBatch(batch);
+                                setIsHistoryModalOpen(false);
+                              }}
+                              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                              title="View this historical table"
+                            >
+                              <Eye size={13} />
+                              <span>View Snapshot</span>
+                            </button>
+                          )}
+
+                          {!isActive && (
+                            <button
+                              type="button"
+                              className="btn btn-sm"
+                              onClick={() => handleRestoreBatch(batch)}
+                              style={{
+                                background: "#16a34a",
+                                color: "#ffffff",
+                                border: "none",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                fontWeight: 600
+                              }}
+                              title="Is table ko wapas current active table banayein"
+                            >
+                              <RotateCcw size={13} />
+                              <span>Restore to Active</span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => handleDownloadBatchCSV(batch)}
+                            title="Download snapshot CSV"
+                            style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "6px 8px" }}
+                          >
+                            <Download size={13} />
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => handleDeleteBatch(batch)}
+                            title="Delete this historical snapshot"
+                            style={{ padding: "6px 8px", color: "#ef4444" }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ padding: "12px 22px", borderTop: "1px solid #e2e8f0", background: "#f8fafc", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontSize: "12px", color: "#64748b" }}>
+                Total History Batches: <strong>{historyBatches.length}</strong>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setIsHistoryModalOpen(false)}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

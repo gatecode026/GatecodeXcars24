@@ -17,9 +17,11 @@ const dataManagementImportHistorySchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["Processing", "Completed", "Failed"],
+      enum: ["Processing", "Completed", "Archived", "Failed"],
       default: "Completed"
     },
+    isCurrentActive: { type: Boolean, default: true, index: true },
+    archivedAt: { type: Date, default: null, index: true },
     performedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     performedByName: { type: String, default: "Admin" },
     columnsDetected: { type: [String], default: [] },

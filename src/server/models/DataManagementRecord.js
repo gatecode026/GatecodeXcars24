@@ -68,12 +68,14 @@ const dataManagementRecordSchema = new mongoose.Schema(
     // Stores any additional or unmapped columns from imported spreadsheets
     customFields: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} },
 
-    // ─── 10. AUDIT METADATA ───
+    // ─── 10. AUDIT & HISTORY METADATA ───
     importedAt: { type: Date, default: Date.now, index: true },
     importedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-    importBatchId: { type: mongoose.Schema.Types.ObjectId, ref: "DataManagementImportHistory", default: null },
+    importBatchId: { type: mongoose.Schema.Types.ObjectId, ref: "DataManagementImportHistory", default: null, index: true },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-    isDeleted: { type: Boolean, default: false, index: true }
+    isDeleted: { type: Boolean, default: false, index: true },
+    isArchived: { type: Boolean, default: false, index: true },
+    archivedAt: { type: Date, default: null, index: true }
   },
   {
     timestamps: true,
@@ -82,7 +84,7 @@ const dataManagementRecordSchema = new mongoose.Schema(
 );
 
 // Compound indexes for frequent query patterns
-dataManagementRecordSchema.index({ isDeleted: 1, LEAD_DATE: -1 });
+dataManagementRecordSchema.index({ isDeleted: 1, isArchived: 1, LEAD_DATE: -1 });
 dataManagementRecordSchema.index({ isDeleted: 1, APPT_STATUS: 1 });
 dataManagementRecordSchema.index({ isDeleted: 1, APPT_REGION: 1 });
 dataManagementRecordSchema.index({ isDeleted: 1, MAKE_NAME: 1, MODEL_NAME: 1 });

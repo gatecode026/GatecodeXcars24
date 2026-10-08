@@ -318,8 +318,28 @@ export const buildFieldPredicate = (field, operator, value, from, to) => {
 /**
  * Builds the complete MongoDB filter object based on search, filters array, and logic (AND/OR).
  */
-export const buildMongoQuery = ({ search = "", filters = [], logic = "AND", statusQuickFilter = "" } = {}) => {
+export const buildMongoQuery = ({
+  search = "",
+  filters = [],
+  logic = "AND",
+  statusQuickFilter = "",
+  batchId = null,
+  viewMode = "active"
+} = {}) => {
   const query = { isDeleted: false };
+
+  // Batch / Archive History Filtering
+  if (batchId) {
+    query.importBatchId = batchId;
+  } else if (viewMode === "archived") {
+    query.isArchived = true;
+  } else if (viewMode === "all") {
+    // include both active and archived
+  } else {
+    // Default: Show current active table only
+    query.isArchived = { $ne: true };
+  }
+
   const clauses = [];
 
   // 1. Quick Status Filter (from tab pills)

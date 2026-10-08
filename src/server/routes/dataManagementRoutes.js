@@ -6,6 +6,8 @@ import {
   validateDataImport,
   importDataManagementRecords,
   getDataManagementImportHistory,
+  restoreDataManagementHistoryBatch,
+  deleteDataManagementHistoryBatch,
   getDataManagementRecordById,
   updateDataManagementRecord,
   deleteDataManagementRecord,
@@ -27,6 +29,8 @@ router.get("/columns", getDataManagementColumns);
 router.post("/validate-import", validateDataImport);
 router.post("/import", importDataManagementRecords);
 router.get("/import-history", getDataManagementImportHistory);
+router.post("/import-history/:batchId/restore", restoreDataManagementHistoryBatch);
+router.delete("/import-history/:batchId", deleteDataManagementHistoryBatch);
 
 router.post("/export/csv", exportDataManagementCSV);
 router.post("/export/xlsx", exportDataManagementXLSX);
