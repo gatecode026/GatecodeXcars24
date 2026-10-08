@@ -526,16 +526,20 @@ export async function getMonthlySalesPerformance(employeeId, month, year) {
   const dateFilter = buildPeriodDateFilter(startOfMonth, endOfMonth);
 
   let verifiedCount = 0;
+  let leadSales = 0;
   let orderSales = 0;
 
   if (salesMetricSource === "appointments" || salesMetricSource === "combined") {
-    verifiedCount = await Customer.countDocuments({
+    const verifiedCustomers = await Customer.find({
       $and: [
         empFilter,
         dateFilter,
         { verificationStatus: "Verified" }
       ]
-    });
+    }).select("saleAmount").lean();
+    verifiedCount = verifiedCustomers.length;
+    // Exact manual sale amounts entered by sales agent for each lead
+    leadSales = verifiedCustomers.reduce((sum, c) => sum + Math.max(0, Number(c.saleAmount || 0)), 0);
   }
 
   if (salesMetricSource === "orders" || salesMetricSource === "combined") {
@@ -549,11 +553,11 @@ export async function getMonthlySalesPerformance(employeeId, month, year) {
 
   let monthlySales = 0;
   if (salesMetricSource === "appointments") {
-    monthlySales = Math.round(verifiedCount * saleValuePerLead * 100) / 100;
+    monthlySales = Math.round(leadSales * 100) / 100;
   } else if (salesMetricSource === "orders") {
     monthlySales = Math.round(orderSales * 100) / 100;
   } else {
-    monthlySales = Math.round((verifiedCount * saleValuePerLead + orderSales) * 100) / 100;
+    monthlySales = Math.round((leadSales + orderSales) * 100) / 100;
   }
 
   const salesAchievementPercent = calculateSalesAchievement(monthlySales, monthlySalesTarget);
@@ -566,6 +570,7 @@ export async function getMonthlySalesPerformance(employeeId, month, year) {
     year,
     salesMetricSource,
     verifiedLeadCount: verifiedCount,
+    leadSales: Math.round(leadSales * 100) / 100,
     saleValuePerLead,
     orderSales,
     monthlySales,

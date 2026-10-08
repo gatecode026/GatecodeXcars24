@@ -197,8 +197,8 @@ export default function EmployeeDetailDrawer({
                     <strong>{sales?.verifiedLeadCount || 0} visits</strong>
                   </div>
                   <div className="perf-drawer-kv">
-                    <span>Valuation / Lead</span>
-                    <strong>{formatINR(sales?.saleValuePerLead || 65000)}</strong>
+                    <span>Lead Sales Volume</span>
+                    <strong>{formatINR(sales?.leadSales !== undefined ? sales?.leadSales : sales?.monthlySales)}</strong>
                   </div>
                   <div className="perf-drawer-kv">
                     <span>Excess Sales Above Quota</span>

@@ -12,10 +12,41 @@ const BellIcon = () => (
   </svg>
 );
 
-const SearchIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="11" cy="11" r="8" />
-    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+const SearchIcon = ({ size = 18 }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    style={{ display: "block" }}
+  >
+    {/* Precision-tuned lens circle */}
+    <circle
+      cx="11"
+      cy="11"
+      r="7"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    {/* Ergonomic handle with rounded terminal */}
+    <path
+      d="M16.5 16.5L21 21"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    {/* Subtle modern lens flare */}
+    <path
+      d="M8.5 8.5C9.2 7.8 10.1 7.4 11 7.4"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeOpacity="0.45"
+    />
   </svg>
 );
 
@@ -68,12 +99,17 @@ const EmployeeTopNavbar = () => {
           </button>
 
           <div className="top-navbar-search">
-            <SearchIcon />
+            <span className="search-icon-wrapper" aria-hidden="true">
+              <SearchIcon size={17} />
+            </span>
             <input
               type="text"
               placeholder="Search leads, car registration, customer name..."
               onKeyDown={handleGlobalSearch}
             />
+            <span className="search-shortcut-badge" title="Press Enter to search">
+              ↵ Enter
+            </span>
           </div>
         </div>
 

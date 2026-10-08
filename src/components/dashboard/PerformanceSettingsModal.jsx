@@ -213,7 +213,7 @@ export default function PerformanceSettingsModal({
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Lead Valuation per Verified Visit (₹)</label>
+                    <label className="form-label">Default Lead Valuation (₹) (Optional Fallback)</label>
                     <input
                       type="number"
                       min="0"
@@ -221,9 +221,8 @@ export default function PerformanceSettingsModal({
                       className={`form-control ${fieldErrors.saleValuePerLead ? "is-invalid" : ""}`}
                       value={form.saleValuePerLead}
                       onChange={(e) => setForm({ ...form, saleValuePerLead: e.target.value })}
-                      required
                     />
-                    <span className="form-hint">Attributed value for verified appointments</span>
+                    <span className="form-hint">Sales agents enter manual deal amount per lead; this is only a legacy fallback</span>
                   </div>
                 </div>
 

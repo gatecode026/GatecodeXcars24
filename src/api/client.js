@@ -189,6 +189,7 @@ api.interceptors.response.use(
       else if (url.includes("/calling-records") || url.includes("/employee/calling-records")) type = "calling";
       else if (url.includes("/performance-settings")) type = "settings";
       else if (url.includes("/users")) type = "user";
+      else if (url.includes("/data-management")) type = "data-management";
 
       emitDataSync({ type, method, url, source: "interceptor" });
     }

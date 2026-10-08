@@ -163,7 +163,7 @@ export default function PerformanceKpiGrid({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginBottom: "24px" }}>
       {/* ── ROW 1: Employee & Daily Operational Volume ── */}
-      <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+      <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
         {/* Total Employees */}
         <div className="kpi-card">
           <div className="kpi-top">
@@ -212,7 +212,7 @@ export default function PerformanceKpiGrid({
       </div>
 
       {/* ── ROW 2: Benchmark & Sales Achievement ── */}
-      <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+      <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
         {/* Appointment Achievement % */}
         <div className="kpi-card">
           <div className="kpi-top">
@@ -236,7 +236,7 @@ export default function PerformanceKpiGrid({
           </div>
           <div className="kpi-label">Monthly Sales</div>
           <div className="kpi-value" style={{ fontSize: "20px" }}>{formatINR(monthlySales)}</div>
-          <div className="kpi-subtext">Verified order &amp; lead revenue</div>
+          <div className="kpi-subtext">Manual lead &amp; order sales volume</div>
         </div>
 
         {/* Monthly Sales Target */}
@@ -267,7 +267,7 @@ export default function PerformanceKpiGrid({
       </div>
 
       {/* ── ROW 3: Remaining Quota, Incentive Liability & Team Target Met ── */}
-      <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+      <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
         {/* Remaining Sales Target */}
         <div className="kpi-card">
           <div className="kpi-top">

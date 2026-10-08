@@ -108,6 +108,14 @@ const LogoutIcon = () => (
   </svg>
 );
 
+const DatabaseIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <ellipse cx="12" cy="5" rx="9" ry="3" />
+    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+  </svg>
+);
+
 const ChevronDown = ({ open }) => (
   <svg
     viewBox="0 0 24 24"
@@ -136,13 +144,6 @@ const Sidebar = () => {
   const pathname = location?.pathname || "";
 
   const [reportsOpen, setReportsOpen] = useState(true);
-  const [performanceOpen, setPerformanceOpen] = useState(pathname.startsWith("/admin/performance"));
-
-  useEffect(() => {
-    if (pathname.startsWith("/admin/performance")) {
-      setPerformanceOpen(true);
-    }
-  }, [pathname]);
 
   const handleLogout = () => {
     const loginPath = localStorage.getItem("dashboard_login_path") || "/login";
@@ -192,33 +193,16 @@ const Sidebar = () => {
             Employees &amp; Roles
           </NavLink>
 
-          {/* Performance Expandable Group */}
-          <div className="sidebar-dropdown">
-            <button
-              type="button"
-              className={`sidebar-dropdown-btn ${pathname.startsWith("/admin/performance") ? "active" : ""}`}
-              onClick={() => setPerformanceOpen(!performanceOpen)}
-            >
-              <span className="sidebar-icon"><PerformanceIcon /></span>
-              <span>Performance</span>
-              <ChevronDown open={performanceOpen} />
-            </button>
-            {performanceOpen && (
-              <div className="sidebar-submenu">
-                <NavLink to="/admin/performance" className="sidebar-sublink" onClick={closeSidebar}>
-                  Performance Overview
-                </NavLink>
-                <NavLink to="/admin/performance" className="sidebar-sublink" onClick={closeSidebar}>
-                  Leaderboard
-                </NavLink>
-                <NavLink to="/admin/performance" className="sidebar-sublink" onClick={closeSidebar}>
-                  Bonus Report
-                </NavLink>
-              </div>
-            )}
-          </div>
+          <NavLink to="/admin/performance" className="sidebar-link" onClick={closeSidebar}>
+            <span className="sidebar-icon"><PerformanceIcon /></span>
+            Performance
+          </NavLink>
 
           <span className="sidebar-section-label">Operations &amp; Reports</span>
+          <NavLink to="/admin/data-management" className="sidebar-link" onClick={closeSidebar}>
+            <span className="sidebar-icon"><DatabaseIcon /></span>
+            Data Management
+          </NavLink>
           <NavLink to="/admin/calling-report" className="sidebar-link" onClick={closeSidebar}>
             <span className="sidebar-icon"><PerformanceIcon /></span>
             Telecalling Report

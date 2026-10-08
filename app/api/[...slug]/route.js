@@ -124,6 +124,23 @@ import {
   getLookups
 } from "@/src/server/controllers/masterDataController";
 
+import {
+  getDataManagementRecords,
+  getDataManagementColumns,
+  validateDataImport,
+  importDataManagementRecords,
+  getDataManagementImportHistory,
+  getDataManagementRecordById,
+  updateDataManagementRecord,
+  deleteDataManagementRecord,
+  bulkDeleteDataManagementRecords,
+  exportDataManagementCSV,
+  exportDataManagementPDF,
+  getSavedViews,
+  createSavedView,
+  deleteSavedView
+} from "@/src/server/controllers/dataManagementController";
+
 async function dispatch(request, context) {
   const method = request.method.toUpperCase();
   const rawParams = await (context?.params || {});
@@ -351,7 +368,46 @@ async function dispatch(request, context) {
     return runHandler(request, {}, [protect], getLookups);
   }
 
-  // 12. /api/health
+  // 12. /api/data-management
+  if (path === "/data-management" && method === "GET") {
+    return runHandler(request, {}, [protect, adminOnly], getDataManagementRecords);
+  }
+  if (path === "/data-management/columns" && method === "GET") {
+    return runHandler(request, {}, [protect, adminOnly], getDataManagementColumns);
+  }
+  if (path === "/data-management/validate-import" && method === "POST") {
+    return runHandler(request, {}, [protect, adminOnly], validateDataImport);
+  }
+  if (path === "/data-management/import" && method === "POST") {
+    return runHandler(request, {}, [protect, adminOnly], importDataManagementRecords);
+  }
+  if (path === "/data-management/import-history" && method === "GET") {
+    return runHandler(request, {}, [protect, adminOnly], getDataManagementImportHistory);
+  }
+  if (path === "/data-management/export/csv" && method === "POST") {
+    return runHandler(request, {}, [protect, adminOnly], exportDataManagementCSV);
+  }
+  if (path === "/data-management/export/pdf" && method === "POST") {
+    return runHandler(request, {}, [protect, adminOnly], exportDataManagementPDF);
+  }
+  if (path === "/data-management/views") {
+    if (method === "GET") return runHandler(request, {}, [protect, adminOnly], getSavedViews);
+    if (method === "POST") return runHandler(request, {}, [protect, adminOnly], createSavedView);
+  }
+  if (slug[0] === "data-management" && slug[1] === "views" && slug[2] && method === "DELETE") {
+    return runHandler(request, { id: slug[2] }, [protect, adminOnly], deleteSavedView);
+  }
+  if (path === "/data-management/bulk-delete" && method === "POST") {
+    return runHandler(request, {}, [protect, adminOnly], bulkDeleteDataManagementRecords);
+  }
+  if (slug[0] === "data-management" && slug[1] && slug.length === 2) {
+    const params = { id: slug[1] };
+    if (method === "GET") return runHandler(request, params, [protect, adminOnly], getDataManagementRecordById);
+    if (method === "PUT") return runHandler(request, params, [protect, adminOnly], updateDataManagementRecord);
+    if (method === "DELETE") return runHandler(request, params, [protect, adminOnly], deleteDataManagementRecord);
+  }
+
+  // 13. /api/health
   if (path === "/health" && method === "GET") {
     return Response.json(
       { message: "API running" },

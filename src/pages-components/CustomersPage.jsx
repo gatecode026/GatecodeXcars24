@@ -132,10 +132,38 @@ const ActionWrenchIcon = () => (
   </svg>
 );
 
-const SearchIcon = () => (
-  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="11" cy="11" r="8" />
-    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+const SearchIcon = ({ size = 15 }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    style={{ display: "block" }}
+  >
+    <circle
+      cx="11"
+      cy="11"
+      r="7"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M16.5 16.5L21 21"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M8.5 8.5C9.2 7.8 10.1 7.4 11 7.4"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeOpacity="0.45"
+    />
   </svg>
 );
 
@@ -252,6 +280,7 @@ const downloadLeadsPDF = async (records) => {
       "Oddo Meter/KM",
       "CX Name",
       "Cx Mobile No.",
+      "Sale / Deal Value (INR)",
       "Lead By",
       "Follow Up Done By",
       "Date of Follow-up",
@@ -266,6 +295,7 @@ const downloadLeadsPDF = async (records) => {
       c.odometerKm ? `${Number(c.odometerKm).toLocaleString("en-IN")} KM` : "0 KM",
       c.customerName || "-",
       c.mobile || "-",
+      c.saleAmount ? "₹" + Number(c.saleAmount).toLocaleString("en-IN") : "₹0",
       c.leadBy || c.employeeName || "-",
       c.followUpBy || "-",
       c.followUpDate ? formatDateOnly(c.followUpDate) : "-",
@@ -412,7 +442,8 @@ const CustomersPage = ({ defaultTab = "all" }) => {
     followUpDate: "",
     district: "",
     state: "",
-    remark: ""
+    remark: "",
+    saleAmount: ""
   });
   const [formErrors, setFormErrors] = useState({});
 
@@ -597,7 +628,8 @@ const CustomersPage = ({ defaultTab = "all" }) => {
       followUpDate: "",
       district: "",
       state: "",
-      remark: ""
+      remark: "",
+      saleAmount: ""
     });
     setFormErrors({});
     setShowAddModal(true);
@@ -622,7 +654,8 @@ const CustomersPage = ({ defaultTab = "all" }) => {
       followUpDate: lead.followUpDate ? new Date(lead.followUpDate).toISOString().split("T")[0] : "",
       district: lead.district || "",
       state: lead.state || "",
-      remark: lead.remark || ""
+      remark: lead.remark || "",
+      saleAmount: lead.saleAmount !== undefined && lead.saleAmount !== null ? String(lead.saleAmount) : ""
     });
   };
 
@@ -662,6 +695,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
         carNumber: formattedCarNum || formData.carNumber,
         appointmentId: trimmedAptId || undefined,
         odometerKm: Number(formData.odometerKm) || 0,
+        saleAmount: Math.max(0, Number(formData.saleAmount) || 0),
         verified: formData.verificationStatus === "Verified",
         followUp: formData.followUp || "Follow-up",
         leadStatus: formData.followUp === "Converted" ? "Completed" : (formData.verificationStatus === "Verified" ? "Verified" : "Follow-up")
@@ -1082,6 +1116,7 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                   <th>Oddo Meter/KM</th>
                   <th>CX Name</th>
                   <th>Cx Mobile No.</th>
+                  <th>Sale / Deal Value</th>
                   <th>Lead By</th>
                   <th>Follow Up Done By</th>
                   <th>Date of Follow-up</th>
@@ -1161,6 +1196,13 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                         >
                           <span>{lead.mobile}</span>
                         </a>
+                      </td>
+
+                      {/* 7.5. Sale / Deal Value (Manual Entry) */}
+                      <td>
+                        <span style={{ fontSize: "12.5px", fontWeight: 700, color: (lead.saleAmount && Number(lead.saleAmount) > 0) ? "#16a34a" : "var(--text-muted)" }}>
+                          {lead.saleAmount && Number(lead.saleAmount) > 0 ? `₹${Number(lead.saleAmount).toLocaleString("en-IN")}` : "₹0"}
+                        </span>
                       </td>
 
                       {/* 8. Lead By */}
@@ -1454,6 +1496,28 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                     </div>
 
                     <div className="form-group">
+                      <label className="form-label" title="Manual Sale/Deal value closed by sales agent">
+                        Sale / Deal Value (₹) <span style={{ fontSize: "10px", fontWeight: 600, color: "#16a34a" }}>(Manual Entry)</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        className="form-control"
+                        placeholder="e.g. 50000 (Manual entered)"
+                        value={formData.saleAmount}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9]/g, "");
+                          setFormData({ ...formData, saleAmount: val });
+                        }}
+                        style={{ fontWeight: 600, color: "#16a34a" }}
+                      />
+                      <span style={{ fontSize: "10.5px", color: "var(--text-muted)", marginTop: "2px", display: "block" }}>
+                        Manual sale amount for this lead (counts toward monthly sales)
+                      </span>
+                    </div>
+
+                    <div className="form-group">
                       <label className="form-label">Lead Verification</label>
                       <div style={{ display: "flex", alignItems: "center", gap: "10px", height: "38px" }}>
                         <label
@@ -1739,6 +1803,13 @@ const CustomersPage = ({ defaultTab = "all" }) => {
                 <div className="detail-label-val">
                   <span className="detail-label">Appointment Scheduled</span>
                   <div className="detail-value">{formatDateTime(activeDrawer.appointmentDate)}</div>
+                </div>
+
+                <div className="detail-label-val">
+                  <span className="detail-label">Sale / Deal Value</span>
+                  <div className="detail-value" style={{ fontWeight: 700, color: (activeDrawer.saleAmount && Number(activeDrawer.saleAmount) > 0) ? "#16a34a" : "var(--text-heading)" }}>
+                    {activeDrawer.saleAmount && Number(activeDrawer.saleAmount) > 0 ? `₹${Number(activeDrawer.saleAmount).toLocaleString("en-IN")}` : "₹0 (No manual sale entered)"}
+                  </div>
                 </div>
 
                 <div className="detail-label-val">

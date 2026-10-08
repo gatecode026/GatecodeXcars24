@@ -267,6 +267,7 @@ export const exportCustomersCSV = async (req, res, next) => {
       "Oddo Meter/KM",
       "CX Name",
       "Cx Mobile No.",
+      "Sale / Deal Value (INR)",
       "Lead By",
       "Follow Up Done By",
       "Date of Follow-up",
@@ -284,6 +285,7 @@ export const exportCustomersCSV = async (req, res, next) => {
       c.odometerKm ? `${Number(c.odometerKm)} KM` : "0 KM",
       c.customerName || "",
       c.mobile || "",
+      c.saleAmount ? Number(c.saleAmount) : 0,
       c.leadBy || c.employeeName || "",
       c.followUpBy || "",
       fmtDate(c.followUpDate),
@@ -315,7 +317,7 @@ export const createCustomer = async (req, res, next) => {
       customerName, mobile, email, remark, district, state, followUp,
       appointmentId, leadDate, appointmentDate, carNumber, leadBy,
       followUpBy, followUpDate, verified, verificationStatus, odometerKm,
-      leadStatus, assignedTo
+      leadStatus, assignedTo, saleAmount
     } = req.body;
 
     const isPrivileged = ["superadmin", "admin", "manager", "tl"].includes(req.user?.role);
@@ -357,6 +359,7 @@ export const createCustomer = async (req, res, next) => {
       verified: Boolean(verified),
       verificationStatus: verificationStatus || (verified ? "Verified" : "Pending"),
       odometerKm: Number(odometerKm) || 0,
+      saleAmount: Math.max(0, Number(saleAmount) || 0),
       leadStatus: leadStatus || "Pending",
       assignedTo: isPrivileged ? (assignedTo || null) : null
     });
@@ -436,7 +439,8 @@ export const updateCustomer = async (req, res, next) => {
       "customerName", "mobile", "email", "remark", "district", "state", "followUp",
       "appointmentId", "leadDate", "appointmentDate", "carNumber", "leadBy",
       "followUpBy", "followUpDate", "verified", "verificationStatus", "odometerKm",
-      "leadStatus", "assignedTo", "rescheduledDate", "rescheduleCount", "cancellationReason"
+      "leadStatus", "assignedTo", "rescheduledDate", "rescheduleCount", "cancellationReason",
+      "saleAmount"
     ];
 
     const isPrivileged = ["superadmin", "admin", "manager", "tl"].includes(req.user?.role);
@@ -447,7 +451,9 @@ export const updateCustomer = async (req, res, next) => {
         if (!isPrivileged && nonPrivilegedBlockedFields.includes(field)) {
           return; // Ignore unauthorized reassignment attempts by non-privileged roles
         }
-        if (field === "carNumber" && req.body[field]) {
+        if (field === "saleAmount") {
+          customer.saleAmount = Math.max(0, Number(req.body.saleAmount) || 0);
+        } else if (field === "carNumber" && req.body[field]) {
           customer[field] = String(req.body[field]).trim().toUpperCase();
         } else if (field === "appointmentId") {
           if (req.body.appointmentId && String(req.body.appointmentId).trim()) {
@@ -684,6 +690,8 @@ export const bulkImportCustomers = async (req, res, next) => {
       try {
         const rawOdo = getVal(r, "Oddo Meter/KM", "odometerKm", "Odometer", "KM", "Oddo Meter");
         const cleanOdo = Number(rawOdo.replace(/[^0-9.]/g, "")) || 0;
+        const rawSale = getVal(r, "Sale / Deal Value (INR)", "Sale Amount", "saleAmount", "Sale Value", "saleValue", "Deal Value", "dealValue", "Amount", "amount");
+        const cleanSale = rawSale ? Math.max(0, Number(String(rawSale).replace(/[^0-9.]/g, "")) || 0) : 0;
 
         const rawLeadDate = getVal(r, "Lead Date", "leadDate", "Date");
         const leadDate = parseFlexibleDate(rawLeadDate) || new Date();
@@ -742,6 +750,7 @@ export const bulkImportCustomers = async (req, res, next) => {
           verified,
           verificationStatus,
           odometerKm: cleanOdo,
+          saleAmount: cleanSale,
           leadStatus: verificationStatus === "Verified" ? "Verified" : verificationStatus === "Follow-up" ? "Follow-up" : "Pending"
         });
 

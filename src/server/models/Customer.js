@@ -36,7 +36,8 @@ const customerSchema = new mongoose.Schema(
     rescheduledDate: { type: Date, default: null },
     rescheduleCount: { type: Number, default: 0 },
     cancellationReason: { type: String, trim: true, default: "" },
-    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null }
+    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    saleAmount: { type: Number, default: 0, min: 0 }
   },
   { timestamps: true }
 );

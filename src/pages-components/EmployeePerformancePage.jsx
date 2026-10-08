@@ -340,7 +340,7 @@ export default function EmployeePerformancePage() {
           </span>
           <span>•</span>
           <span>
-            Lead Value: <strong style={{ color: "var(--text-heading)" }}>{INR(sales?.saleValuePerLead || 65000)}</strong>
+            Monthly Sales: <strong style={{ color: "var(--text-heading)" }}>{INR(sales?.monthlySales || 0)}</strong>
           </span>
           <span>•</span>
           <span>
@@ -451,7 +451,7 @@ export default function EmployeePerformancePage() {
                 <ModernProgressBar score={sales?.achievementPercent || 0} />
               </div>
               <div className="kpi-subtext">
-                {sales?.verifiedLeadCount ?? 0} verified leads ({INR(sales?.saleValuePerLead)}/lead)
+                {sales?.verifiedLeadCount ?? 0} verified leads ({INR(sales?.monthlySales)} entered revenue)
               </div>
             </div>
 
@@ -577,9 +577,9 @@ export default function EmployeePerformancePage() {
                     </div>
                   </div>
                   <div style={{ background: "rgba(248, 250, 252, 0.8)", border: "1px solid var(--border)", borderRadius: "8px", padding: "10px 12px" }}>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Commission Value / Lead</div>
+                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Revenue From Leads</div>
                     <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-heading)", marginTop: "2px" }}>
-                      {INR(sales?.saleValuePerLead || 65000)}
+                      {INR(sales?.leadSales !== undefined ? sales?.leadSales : sales?.monthlySales)}
                     </div>
                   </div>
                 </div>

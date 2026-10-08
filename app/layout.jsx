@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { Inter } from "next/font/google";
 import "@/src/styles/index.css";
 import { AuthProvider } from "@/src/context/AuthContext";
+import { QueryProvider } from "@/src/lib/query";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const inter = Inter({
@@ -39,10 +40,15 @@ export default function RootLayout({ children }) {
             __html: `
               window.addEventListener('error', function(e) {
                 var msg = (e && e.message) ? e.message : '';
-                if (msg.indexOf('ChunkLoadError') !== -1 || msg.indexOf('Loading chunk') !== -1) {
+                if (
+                  msg.indexOf('ChunkLoadError') !== -1 ||
+                  msg.indexOf('Loading chunk') !== -1 ||
+                  msg.indexOf("reading 'call'") !== -1 ||
+                  msg.indexOf("reading 'default'") !== -1
+                ) {
                   var last = sessionStorage.getItem('chunk_retry');
                   var now = Date.now();
-                  if (!last || (now - Number(last)) > 6000) {
+                  if (!last || (now - Number(last)) > 5000) {
                     sessionStorage.setItem('chunk_retry', String(now));
                     window.location.reload();
                   }
@@ -53,11 +59,13 @@ export default function RootLayout({ children }) {
         />
       </head>
       <body className={inter.className} suppressHydrationWarning>
-        <AuthProvider>
-          <Suspense fallback={<GlobalLoadingFallback />}>
-            {children}
-          </Suspense>
-        </AuthProvider>
+        <QueryProvider>
+          <AuthProvider>
+            <Suspense fallback={<GlobalLoadingFallback />}>
+              {children}
+            </Suspense>
+          </AuthProvider>
+        </QueryProvider>
         <SpeedInsights />
       </body>
     </html>
