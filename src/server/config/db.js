@@ -82,7 +82,7 @@ export const connectDB = async (timeoutMs = 8000) => {
   cached.conn = null;
   cached.promise = null;
 
-  const rawUri = process.env.MONGO_URI || DEFAULT_MONGO_URI;
+  const rawUri = (process.env.MONGO_URI || DEFAULT_MONGO_URI || "").trim();
   if (!rawUri) {
     throw new Error("CRITICAL: MONGO_URI environment variable is missing. Database connection aborted.");
   }

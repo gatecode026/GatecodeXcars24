@@ -12,7 +12,8 @@ const getTokenFromHeader = (req) => {
 };
 
 export const getJwtSecret = () => {
-  const secret = process.env.JWT_SECRET;
+  const rawSecret = process.env.JWT_SECRET;
+  const secret = typeof rawSecret === "string" ? rawSecret.trim() : "";
   if (!secret) {
     if (process.env.NODE_ENV === "production") {
       throw new Error("CRITICAL: JWT_SECRET environment variable is missing.");

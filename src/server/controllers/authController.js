@@ -333,7 +333,11 @@ export const loginAdmin = async (req, res, next) => {
     if (!user) {
       const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase().trim();
       if (normalizedInput === adminEmail || normalizedInput === "admin") {
-        await ensureFixedAdminUser();
+        try {
+          await ensureFixedAdminUser();
+        } catch (seedErr) {
+          console.warn("[Admin Seed Notice]:", seedErr.message);
+        }
         user = await User.findOne({
           $or: [{ email: adminEmail }, { role: "admin" }]
         }).lean();
