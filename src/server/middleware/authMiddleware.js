@@ -1,33 +1,26 @@
-import fs from "node:fs";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
-import { isDatabaseReady, ensureDB } from "../config/db.js";
+import { ensureDB } from "../config/db.js";
 import { User } from "../models/User.js";
 
-import path from "node:path";
-
-const logFile = path.resolve(process.cwd(), "debug.log");
-const debugLog = (msg) => {
-  try { fs.appendFileSync(logFile, `[${new Date().toISOString()}] ${msg}\n`); } catch (_) {}
-};
-
-const getFixedAdminUser = () => ({
-  id: "admin-fallback",
-  _id: "admin-fallback",
-  name: process.env.ADMIN_NAME || "Surendra Admin",
-  email: (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase(),
-  role: "admin"
-});
-
 const getTokenFromHeader = (req) => {
-  const authHeader = req.headers.authorization || "";
+  const authHeader = req.headers?.authorization || req.headers?.Authorization || "";
   if (!authHeader.startsWith("Bearer ")) {
     return null;
   }
-  return authHeader.split(" ")[1];
+  return authHeader.split(" ")[1]?.trim() || null;
 };
 
-const getJwtSecret = () => process.env.JWT_SECRET || "mySuperSecretKey123";
+export const getJwtSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("CRITICAL: JWT_SECRET environment variable is missing.");
+    }
+    console.warn("[Security Warning] JWT_SECRET environment variable is not defined.");
+  }
+  return secret || "dev-fallback-local-only-replace-immediately";
+};
 
 export const protect = async (req, res, next) => {
   try {
@@ -37,91 +30,92 @@ export const protect = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, getJwtSecret());
-    const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase();
+    const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase().trim();
 
-    // 1. Admin/TL token handling (supports fallback ID and valid ObjectIds without CastError)
-    const isAdmin =
-      decoded.role === "admin" ||
-      decoded.role === "tl" ||
-      (decoded.email && decoded.email.toLowerCase() === adminEmail) ||
-      decoded.id === "admin-fallback";
-
-    if (isAdmin) {
-      if (decoded.id && decoded.id !== "admin-fallback" && mongoose.Types.ObjectId.isValid(decoded.id)) {
-        try {
-          const user = await User.findById(decoded.id).select("-password").lean();
-          if (user) {
-            user.role = user.role || decoded.role || "admin";
-            req.user = user;
-            return next();
-          }
-        } catch (_) {}
-      }
-      const fallbackUser = getFixedAdminUser();
-      if (decoded.role === "tl") {
-        fallbackUser.role = "tl";
-        fallbackUser.name = decoded.name || "Team Leader";
-      }
-      req.user = fallbackUser;
-      return next();
-    }
-
-    // 2. Regular employee lookup
     const dbReady = await ensureDB();
     if (!dbReady) {
-      return res.status(401).json({ message: "Unauthorized. User not found." });
+      return res.status(503).json({ message: "Database temporarily unavailable." });
     }
 
-    if (!decoded.id || !mongoose.Types.ObjectId.isValid(decoded.id)) {
-      return res.status(401).json({ message: "Unauthorized. User not found." });
+    let user = null;
+
+    // 1. Direct ObjectId lookup
+    if (decoded.id && mongoose.Types.ObjectId.isValid(decoded.id)) {
+      user = await User.findById(decoded.id).select("-password").lean();
     }
 
-    const user = await User.findById(decoded.id).select("-password").lean();
-    if (user) {
-      if (user.tokenVersion && (decoded.tokenVersion === undefined || user.tokenVersion > decoded.tokenVersion)) {
-        return res.status(401).json({ message: "Session expired. You have been logged out." });
-      }
-
-      req.user = user;
-      return next();
+    // 2. Admin lookup fallback if token has admin email or role
+    if (!user && (decoded.role === "admin" || (decoded.email && decoded.email.toLowerCase() === adminEmail))) {
+      user = await User.findOne({
+        $or: [
+          { email: adminEmail },
+          { role: "admin" }
+        ],
+        isDeleted: { $ne: true }
+      }).select("-password").lean();
     }
 
-    return res.status(401).json({ message: "Unauthorized. User not found." });
+    if (!user) {
+      return res.status(401).json({ message: "Unauthorized. User account not found." });
+    }
+
+    if (user.isDeleted) {
+      return res.status(403).json({ message: "Forbidden. Account deactivated." });
+    }
+
+    // Token version revocation check
+    if (user.tokenVersion && (decoded.tokenVersion === undefined || user.tokenVersion > decoded.tokenVersion)) {
+      return res.status(401).json({ message: "Session expired. You have been logged out." });
+    }
+
+    req.user = user;
+    return next();
   } catch (error) {
-    return res.status(401).json({ message: "Unauthorized. Invalid token." });
+    return res.status(401).json({ message: "Unauthorized. Invalid or expired token." });
   }
 };
 
+/**
+ * Strict Admin-Only authorization check.
+ * Crucial Security Fix: Team Leaders (TL) are NEVER granted adminOnly access.
+ */
 export const adminOnly = (req, res, next) => {
-  const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase();
+  const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase().trim();
 
-  // Primary check: if protect already resolved admin or tl
   if (req.user) {
+    const userRole = (req.user.role || "").toLowerCase();
+    const userEmail = (req.user.email || "").toLowerCase().trim();
     if (
-      req.user.role === "admin" ||
-      req.user.role === "tl" ||
-      (req.user.email && req.user.email.toLowerCase() === adminEmail)
+      userRole === "admin" ||
+      userRole === "superadmin" ||
+      userEmail === adminEmail
     ) {
       return next();
     }
   }
 
-  // Secondary check: decode JWT directly
-  const token = getTokenFromHeader(req);
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, getJwtSecret());
-      if (
-        decoded.role === "admin" ||
-        decoded.role === "tl" ||
-        (decoded.email && decoded.email.toLowerCase() === adminEmail)
-      ) {
-        return next();
-      }
-    } catch (e) {
-      debugLog(`adminOnly JWT verify error: ${e.message}`);
+  return res.status(403).json({ message: "Forbidden. Administrative privileges required." });
+};
+
+/**
+ * Team Leader or Admin access for operational supervision views.
+ */
+export const teamLeaderOrAdmin = (req, res, next) => {
+  const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase().trim();
+
+  if (req.user) {
+    const userRole = (req.user.role || "").toLowerCase();
+    const userEmail = (req.user.email || "").toLowerCase().trim();
+    if (
+      userRole === "admin" ||
+      userRole === "superadmin" ||
+      userRole === "tl" ||
+      userRole === "manager" ||
+      userEmail === adminEmail
+    ) {
+      return next();
     }
   }
 
-  return res.status(403).json({ message: "Forbidden. Admin or TL access required." });
+  return res.status(403).json({ message: "Forbidden. Admin or Team Leader access required." });
 };

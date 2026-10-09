@@ -5,6 +5,7 @@ import { CallingRecord } from "../models/CallingRecord.js";
 import { Customer } from "../models/Customer.js";
 import { invalidateDashboardCache } from "./dashboardController.js";
 import { createMicroCache } from "../cache/serverCache.js";
+import { paginateQuery } from "../utils/pagination.js";
 
 const startOfDay = () => {
   const d = new Date();
@@ -213,22 +214,36 @@ export const getEmployeeDashboard = async (req, res, next) => {
 export const getEmployeeOrdersHistory = async (req, res, next) => {
   try {
     if (!await ensureDB()) {
-      return res.status(200).json({ data: [] });
+      return res.status(200).json({
+        data: [],
+        pagination: { page: 1, perPage: 50, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false }
+      });
     }
     const employeeId = getEmployeeId(req);
     if (!employeeId) {
       return res.status(401).json({ message: "Employee context not found" });
     }
 
-    const cacheKey = `emp_orders_${employeeId}`;
+    const cacheKey = `emp_orders_${employeeId}_${JSON.stringify(req.query || {})}`;
     const cached = employeeOrdersCache.get(cacheKey);
     if (cached) {
-      return res.status(200).json({ data: cached, cached: true });
+      return res.status(200).json(cached);
     }
 
-    const orders = await Order.find({ employeeId }).sort({ createdAt: -1 }).lean();
-    employeeOrdersCache.set(cacheKey, orders);
-    return res.status(200).json({ data: orders });
+    const filter = { employeeId };
+    if (req.query.orderStatus) {
+      filter.orderStatus = req.query.orderStatus;
+    }
+
+    const result = await paginateQuery(Order, filter, {
+      page: req.query.page,
+      limit: req.query.limit || req.query.perPage,
+      all: req.query.all,
+      sort: { createdAt: -1 }
+    });
+
+    employeeOrdersCache.set(cacheKey, result);
+    return res.status(200).json(result);
   } catch (error) {
     return next(error);
   }
@@ -237,22 +252,36 @@ export const getEmployeeOrdersHistory = async (req, res, next) => {
 export const getEmployeeReturnsHistory = async (req, res, next) => {
   try {
     if (!await ensureDB()) {
-      return res.status(200).json({ data: [] });
+      return res.status(200).json({
+        data: [],
+        pagination: { page: 1, perPage: 50, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false }
+      });
     }
     const employeeId = getEmployeeId(req);
     if (!employeeId) {
       return res.status(401).json({ message: "Employee context not found" });
     }
 
-    const cacheKey = `emp_returns_${employeeId}`;
+    const cacheKey = `emp_returns_${employeeId}_${JSON.stringify(req.query || {})}`;
     const cached = employeeReturnsCache.get(cacheKey);
     if (cached) {
-      return res.status(200).json({ data: cached, cached: true });
+      return res.status(200).json(cached);
     }
 
-    const requests = await ReturnRequest.find({ employeeId }).sort({ createdAt: -1 }).lean();
-    employeeReturnsCache.set(cacheKey, requests);
-    return res.status(200).json({ data: requests });
+    const filter = { employeeId };
+    if (req.query.returnStatus) {
+      filter.returnStatus = req.query.returnStatus;
+    }
+
+    const result = await paginateQuery(ReturnRequest, filter, {
+      page: req.query.page,
+      limit: req.query.limit || req.query.perPage,
+      all: req.query.all,
+      sort: { createdAt: -1 }
+    });
+
+    employeeReturnsCache.set(cacheKey, result);
+    return res.status(200).json(result);
   } catch (error) {
     return next(error);
   }
@@ -270,12 +299,23 @@ export const updateEmployeeOrder = async (req, res, next) => {
       return res.status(404).json({ message: "Order not found or unauthorized" });
     }
 
-    const allowedFields = [
-      "customerName", "mobileNumber", "alternateMobileNumber", "fullAddress", "pincode",
-      "carModel", "carNumber", "fuelType", "manufacturingYear", "odometerKm",
-      "productType", "customProductName", "numberOfUnits", "amount",
-      "totalAmount", "advanceAmount", "dateOfOrder", "orderStatus"
-    ];
+    const isPrivileged = ["admin", "superadmin", "tl"].includes(req.user?.role);
+
+    // Regular employees cannot escalate status to Delivered/Approved or modify financial amounts
+    const allowedFields = isPrivileged
+      ? [
+          "customerName", "mobileNumber", "alternateMobileNumber", "fullAddress", "pincode",
+          "carModel", "carNumber", "fuelType", "manufacturingYear", "odometerKm",
+          "productType", "customProductName", "numberOfUnits", "amount",
+          "totalAmount", "advanceAmount", "dateOfOrder", "orderStatus",
+          "parcelStatus", "trackingId", "courierCompany", "bankName"
+        ]
+      : [
+          "customerName", "mobileNumber", "alternateMobileNumber", "fullAddress", "pincode",
+          "carModel", "carNumber", "fuelType", "manufacturingYear", "odometerKm",
+          "customProductName", "numberOfUnits"
+        ];
+
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) order[field] = req.body[field];
     }
@@ -295,10 +335,17 @@ export const deleteEmployeeOrder = async (req, res, next) => {
       return res.status(401).json({ message: "Employee context not found" });
     }
 
-    const order = await Order.findOneAndDelete({ _id: req.params.id, employeeId });
+    const order = await Order.findOne({ _id: req.params.id, employeeId });
     if (!order) {
       return res.status(404).json({ message: "Order not found or unauthorized" });
     }
+
+    // Employees can only delete their own pending orders; delivered/approved orders require admin/TL intervention
+    if (!["admin", "superadmin", "tl"].includes(req.user?.role) && ["Delivered", "Approved"].includes(order.orderStatus)) {
+      return res.status(403).json({ message: "Cannot delete finalized or approved orders. Contact your Team Leader or Admin." });
+    }
+
+    await Order.findByIdAndDelete(order._id);
     invalidateDashboardCache();
     return res.status(200).json({ message: "Order deleted successfully" });
   } catch (error) {
@@ -318,11 +365,20 @@ export const updateEmployeeReturn = async (req, res, next) => {
       return res.status(404).json({ message: "Return request not found or unauthorized" });
     }
 
-    const allowedFields = [
-      "customerName", "mobileNumber", "pincode", "productType",
-      "numberOfUnitsReturning", "returnReason", "customReason",
-      "additionalDescription", "returnDate", "returnStatus"
-    ];
+    const isPrivileged = ["admin", "superadmin", "tl"].includes(req.user?.role);
+
+    const allowedFields = isPrivileged
+      ? [
+          "customerName", "mobileNumber", "pincode", "productType",
+          "numberOfUnitsReturning", "returnReason", "customReason",
+          "additionalDescription", "returnDate", "returnStatus"
+        ]
+      : [
+          "customerName", "mobileNumber", "pincode", "productType",
+          "numberOfUnitsReturning", "returnReason", "customReason",
+          "additionalDescription", "returnDate"
+        ];
+
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) request[field] = req.body[field];
     }
@@ -356,7 +412,10 @@ export const deleteEmployeeReturn = async (req, res, next) => {
 export const getEmployeeCallingRecords = async (req, res, next) => {
   try {
     if (!await ensureDB()) {
-      return res.status(200).json({ data: [] });
+      return res.status(200).json({
+        data: [],
+        pagination: { page: 1, perPage: 50, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false }
+      });
     }
     const employeeId = getEmployeeId(req);
     if (!employeeId) {
@@ -364,19 +423,27 @@ export const getEmployeeCallingRecords = async (req, res, next) => {
     }
 
     const { filter: dateFilter = "today", startDate, endDate } = req.query;
-    const cacheKey = `emp_calling_${employeeId}_${dateFilter}_${startDate || ""}_${endDate || ""}`;
+    const cacheKey = `emp_calling_${employeeId}_${JSON.stringify(req.query || {})}`;
     const cached = employeeCallingCache.get(cacheKey);
     if (cached) {
-      return res.status(200).json({ data: cached, cached: true });
+      return res.status(200).json(cached);
     }
 
     const filter = { employeeId };
     const range = getDateRange(dateFilter, startDate, endDate);
-    filter.date = { $gte: range.start, $lte: range.end };
+    if (range?.start && range?.end) {
+      filter.date = { $gte: range.start, $lte: range.end };
+    }
 
-    const records = await CallingRecord.find(filter).sort({ date: -1, createdAt: -1 }).lean();
-    employeeCallingCache.set(cacheKey, records);
-    return res.status(200).json({ data: records });
+    const result = await paginateQuery(CallingRecord, filter, {
+      page: req.query.page,
+      limit: req.query.limit || req.query.perPage,
+      all: req.query.all,
+      sort: { date: -1, createdAt: -1 }
+    });
+
+    employeeCallingCache.set(cacheKey, result);
+    return res.status(200).json(result);
   } catch (error) {
     return next(error);
   }

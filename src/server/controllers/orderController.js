@@ -3,6 +3,7 @@ import { Order } from "../models/Order.js";
 import { recordActivity } from "./activityController.js";
 import { invalidateDashboardCache } from "./dashboardController.js";
 import { createMicroCache } from "../cache/serverCache.js";
+import { paginateQuery } from "../utils/pagination.js";
 
 const orderTableCache = createMicroCache("orders", 8000);
 
@@ -77,14 +78,17 @@ export const getOrders = async (req, res, next) => {
   try {
     const dbReady = await ensureDB();
     if (!dbReady) {
-      return res.status(200).json({ data: [] });
+      return res.status(200).json({
+        data: [],
+        pagination: { page: 1, perPage: 50, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false }
+      });
     }
 
     const userId = req.user?._id || req.user?.id || "anon";
     const cacheKey = `${String(userId)}_${JSON.stringify(req.query || {})}`;
     const cached = orderTableCache.get(cacheKey);
     if (cached) {
-      return res.status(200).json({ data: cached });
+      return res.status(200).json(cached);
     }
 
     const filter = {};
@@ -92,10 +96,30 @@ export const getOrders = async (req, res, next) => {
       filter.employeeId = req.user._id;
     }
 
-    const orders = await Order.find(filter).sort({ createdAt: -1 }).lean();
-    orderTableCache.set(cacheKey, orders);
+    if (req.query.orderStatus) {
+      filter.orderStatus = req.query.orderStatus;
+    }
+    if (req.query.parcelStatus) {
+      filter.parcelStatus = req.query.parcelStatus;
+    }
+    if (req.query.search) {
+      const sanitized = String(req.query.search).trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      filter.$or = [
+        { customerName: { $regex: sanitized, $options: "i" } },
+        { mobileNumber: { $regex: sanitized, $options: "i" } },
+        { carNumber: { $regex: sanitized, $options: "i" } }
+      ];
+    }
 
-    return res.status(200).json({ data: orders });
+    const result = await paginateQuery(Order, filter, {
+      page: req.query.page,
+      limit: req.query.limit || req.query.perPage,
+      all: req.query.all,
+      sort: { createdAt: -1 }
+    });
+
+    orderTableCache.set(cacheKey, result);
+    return res.status(200).json(result);
   } catch (error) {
     return next(error);
   }
@@ -274,7 +298,7 @@ export const bulkImportOrders = async (req, res, next) => {
       return isNaN(parsed) ? 0 : parsed;
     };
 
-    let insertedCount = 0;
+    const docsToInsert = [];
     const errors = [];
 
     for (let i = 0; i < rows.length; i++) {
@@ -301,8 +325,9 @@ export const bulkImportOrders = async (req, res, next) => {
       const courierCompany = getVal(r, "Courier Company", "courierCompany") || "";
       const bankName = getVal(r, "Bank Name", "bankName") || "";
 
-      try {
-        await Order.create({
+      docsToInsert.push({
+        rowIndex: i + 1,
+        doc: {
           employeeId: req.user?._id || req.user?.id,
           employeeName: req.user?.name || "Executive",
           customerName,
@@ -321,10 +346,31 @@ export const bulkImportOrders = async (req, res, next) => {
           trackingId,
           courierCompany,
           bankName: ["SBI", "BOB", "BOM", "MGB", "UPGB", "MPGB"].includes(bankName) ? bankName : ""
-        });
-        insertedCount++;
-      } catch (err) {
-        errors.push({ row: i + 1, error: err.message });
+        }
+      });
+    }
+
+    // Bounded chunked insertion (250 docs per chunk)
+    let insertedCount = 0;
+    const CHUNK_SIZE = 250;
+    for (let i = 0; i < docsToInsert.length; i += CHUNK_SIZE) {
+      const chunkItems = docsToInsert.slice(i, i + CHUNK_SIZE);
+      const chunkDocs = chunkItems.map((item) => item.doc);
+      try {
+        const inserted = await Order.insertMany(chunkDocs, { ordered: false });
+        insertedCount += inserted.length;
+      } catch (batchErr) {
+        if (batchErr.insertedDocs) {
+          insertedCount += batchErr.insertedDocs.length;
+        }
+        if (batchErr.writeErrors) {
+          batchErr.writeErrors.forEach((we) => {
+            const originalRow = chunkItems[we.index]?.rowIndex || (i + we.index + 1);
+            errors.push({ row: originalRow, error: we.errmsg || we.message });
+          });
+        } else {
+          errors.push({ batch: Math.floor(i / CHUNK_SIZE) + 1, error: batchErr.message });
+        }
       }
     }
 

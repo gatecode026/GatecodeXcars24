@@ -1,6 +1,9 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 import { ensureDB, isDatabaseReady } from "../config/db.js";
+import { ensureFixedAdminUser } from "../config/seedAdmin.js";
+import { getJwtSecret } from "../middleware/authMiddleware.js";
 import { User } from "../models/User.js";
 import { Customer } from "../models/Customer.js";
 import { recordActivity } from "./activityController.js";
@@ -9,36 +12,15 @@ import { createMicroCache } from "../cache/serverCache.js";
 
 const usersTableCache = createMicroCache("users", 10000);
 
-const getFixedAdminUser = () => ({
-  id: "admin-fallback",
-  name: process.env.ADMIN_NAME || "Surendra Admin",
-  email: (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase(),
-  role: "admin"
-});
-
-const isFixedAdminCredentials = (email, password) => {
-  const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase().trim();
-  const adminPassword = (process.env.ADMIN_PASSWORD || "surendra").trim();
-  const inputEmail = String(email || "").toLowerCase().trim();
-  const inputPassword = String(password || "").trim();
-  const allowedUsernames = [
-    adminEmail,
-    adminEmail.split("@")[0],
-    "surendra_admin",
-    "surendra",
-    "admin"
-  ];
-  return (
-    allowedUsernames.includes(inputEmail) &&
-    (inputPassword === adminPassword || inputPassword.toLowerCase() === adminPassword.toLowerCase())
-  );
-};
-
-const getJwtSecret = () => process.env.JWT_SECRET || "mySuperSecretKey123";
-
 const signToken = (user) =>
   jwt.sign(
-    { id: user.id || user._id, name: user.name, email: user.email, role: user.role, tokenVersion: user.tokenVersion ?? 0 },
+    {
+      id: String(user.id || user._id),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      tokenVersion: user.tokenVersion ?? 0
+    },
     getJwtSecret(),
     { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
   );
@@ -330,84 +312,71 @@ export const loginAdmin = async (req, res, next) => {
     const normalizedInput = String(email || "").toLowerCase().trim();
     const cleanPassword = String(password || "").trim();
 
-    const isFixedAdmin = isFixedAdminCredentials(normalizedInput, cleanPassword);
-
-    // Fast-path: If admin credentials match, return immediately without blocking on network!
-    if (isFixedAdmin) {
-      const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase();
-      const adminUser = getFixedAdminUser();
-
-      if (isDatabaseReady()) {
-        try {
-          const dbAdmin = await User.findOne({
-            $or: [{ email: adminEmail }, { role: "admin" }]
-          }).select("_id name email role tokenVersion").lean();
-          if (dbAdmin) {
-            return res.status(200).json({
-              message: "Login successful",
-              token: signToken({ id: dbAdmin._id, name: dbAdmin.name || adminUser.name, email: dbAdmin.email, role: "admin", tokenVersion: dbAdmin.tokenVersion ?? 0 }),
-              user: { id: dbAdmin._id, name: dbAdmin.name || adminUser.name, email: dbAdmin.email, role: "admin" }
-            });
-          }
-        } catch (_) {}
-      } else {
-        // Trigger connection in background without delaying user login response
-        ensureDB().catch(() => {});
-      }
-
-      return res.status(200).json({
-        message: "Login successful",
-        token: signToken(adminUser),
-        user: adminUser
-      });
+    if (!normalizedInput || !cleanPassword) {
+      return res.status(400).json({ message: "Email/username and password are required" });
     }
 
-    if (!isDatabaseReady()) {
-      const ready = await ensureDB();
-      if (!ready) {
-        if (role === "employee") {
-          return res.status(503).json({ message: "Database connecting. Please retry in 2 seconds." });
-        }
-        return res.status(401).json({ message: "Invalid credentials" });
-      }
+    const ready = await ensureDB();
+    if (!ready) {
+      return res.status(503).json({ message: "Database temporarily unavailable. Please retry shortly." });
     }
 
     // Fast indexed query with .lean() for minimal overhead
-    const user = await User.findOne({
+    let user = await User.findOne({
       $or: [
         { email: normalizedInput },
         { username: normalizedInput }
       ]
     }).lean();
 
-    if (user) {
-      if (user.isDeleted) {
-        return res.status(403).json({ message: "This account has been deactivated. Please contact your administrator." });
+    // If user not found, check if admin needs initial auto-seeding
+    if (!user) {
+      const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase().trim();
+      if (normalizedInput === adminEmail || normalizedInput === "admin") {
+        await ensureFixedAdminUser();
+        user = await User.findOne({
+          $or: [{ email: adminEmail }, { role: "admin" }]
+        }).lean();
       }
-
-      let ok = await bcrypt.compare(cleanPassword, user.password);
-      if (!ok && cleanPassword.toLowerCase() !== cleanPassword) {
-        ok = await bcrypt.compare(cleanPassword.toLowerCase(), user.password);
-      }
-
-      if (!ok) {
-        return res.status(401).json({ message: "Invalid credentials" });
-      }
-
-      const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase();
-      const userRole = (user.role === "admin" || user.email?.toLowerCase() === adminEmail)
-        ? "admin"
-        : (user.role === "tl" ? "tl" : "employee");
-      const tokenVersion = user.tokenVersion ?? 0;
-
-      return res.status(200).json({
-        message: "Login successful",
-        token: signToken({ id: user._id, name: user.name, email: user.email, role: userRole, tokenVersion }),
-        user: { id: user._id, name: user.name, email: user.email, role: userRole }
-      });
     }
 
-    return res.status(401).json({ message: "Invalid credentials" });
+    if (!user) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    if (user.isDeleted) {
+      return res.status(403).json({ message: "This account has been deactivated. Please contact your administrator." });
+    }
+
+    const ok = await bcrypt.compare(cleanPassword, user.password);
+    if (!ok) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    const adminEmail = (process.env.ADMIN_EMAIL || "surendraadmin@gmail.com").toLowerCase();
+    const userRole = (user.role === "admin" || user.email?.toLowerCase() === adminEmail)
+      ? "admin"
+      : (user.role === "tl" ? "tl" : "employee");
+    const tokenVersion = user.tokenVersion ?? 0;
+
+    const token = signToken({
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: userRole,
+      tokenVersion
+    });
+
+    return res.status(200).json({
+      message: "Login successful",
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: userRole
+      }
+    });
   } catch (error) {
     return next(error);
   }
@@ -418,7 +387,7 @@ export const logoutUser = async (req, res, next) => {
     if (!await ensureDB()) {
       return res.status(200).json({ message: "Logged out successfully" });
     }
-    if (req.user?._id && req.user._id !== "admin-fallback") {
+    if (req.user?._id) {
       await User.findByIdAndUpdate(req.user._id, { $inc: { tokenVersion: 1 } });
     }
     return res.status(200).json({ message: "Logged out successfully" });
@@ -432,33 +401,32 @@ export const getProfile = async (req, res, next) => {
     const userId = req.user?._id || req.user?.id;
     const userEmail = (req.user?.email || "").toLowerCase();
 
-    if (!await ensureDB() || userId === "admin-fallback") {
-      const fixed = getFixedAdminUser();
-      return res.status(200).json({
-        data: {
-          id: fixed.id,
-          name: fixed.name,
-          email: fixed.email,
-          role: fixed.role,
-          phoneNumber: "",
-          username: "admin"
-        }
-      });
+    if (!await ensureDB()) {
+      return res.status(503).json({ message: "Database temporarily unavailable." });
     }
 
     let user = null;
-    if (userId) {
-      user = await User.findById(userId, { password: 0 });
+    if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+      user = await User.findById(userId, { password: 0 }).lean();
     }
     if (!user && userEmail) {
-      user = await User.findOne({ email: userEmail }, { password: 0 });
+      user = await User.findOne({ email: userEmail, isDeleted: { $ne: true } }, { password: 0 }).lean();
     }
 
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({ message: "User profile not found." });
     }
 
-    return res.status(200).json({ data: user });
+    return res.status(200).json({
+      data: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phoneNumber: user.phoneNumber || "",
+        username: user.username || ""
+      }
+    });
   } catch (error) {
     return next(error);
   }
@@ -470,18 +438,8 @@ export const updateProfile = async (req, res, next) => {
     const userEmail = (req.user?.email || "").toLowerCase();
     const { name, email, phoneNumber, username, currentPassword, newPassword } = req.body;
 
-    if (!await ensureDB() || userId === "admin-fallback") {
-      return res.status(200).json({
-        message: "Profile updated successfully",
-        data: {
-          id: userId || "admin-fallback",
-          name: name || process.env.ADMIN_NAME || "Surendra Admin",
-          email: email || process.env.ADMIN_EMAIL,
-          role: "admin",
-          phoneNumber: phoneNumber || "",
-          username: username || "admin"
-        }
-      });
+    if (!await ensureDB()) {
+      return res.status(503).json({ message: "Database temporarily unavailable." });
     }
 
     let user = null;

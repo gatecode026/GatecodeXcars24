@@ -32,6 +32,7 @@ const returnRequestSchema = new mongoose.Schema(
 
 returnRequestSchema.index({ createdAt: -1 });
 returnRequestSchema.index({ employeeId: 1, createdAt: -1 });
+returnRequestSchema.index({ employeeId: 1, returnStatus: 1, createdAt: -1 });
 returnRequestSchema.index({ returnStatus: 1 });
 returnRequestSchema.index({ mobileNumber: 1 });
 returnRequestSchema.index({ customerName: 1 });

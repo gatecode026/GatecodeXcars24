@@ -303,9 +303,17 @@ export const exportBonusReportCSV = async (req, res, next) => {
       r.sales.status
     ]);
 
+    const escCsv = (val) => {
+      let s = String(val ?? "").replace(/"/g, '""');
+      if (/^[=+\-@\t\r]/.test(s)) {
+        s = `'${s}`;
+      }
+      return `"${s}"`;
+    };
+
     const csvLines = [
-      headers.map((h) => `"${h}"`).join(","),
-      ...rows.map((row) => row.map((c) => `"${c}"`).join(","))
+      headers.map(escCsv).join(","),
+      ...rows.map((row) => row.map(escCsv).join(","))
     ];
 
     const csv = "\uFEFF" + csvLines.join("\r\n");

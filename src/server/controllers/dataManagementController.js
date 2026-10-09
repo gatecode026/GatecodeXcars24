@@ -97,8 +97,21 @@ export const getDataManagementRecords = async (req, res) => {
 };
 
 // ─── 2. GET COLUMNS & DISTINCT FILTER OPTIONS ───────────────────────────────
+let cachedColumnsData = null;
+let cachedColumnsTime = 0;
+const COLUMNS_CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+
+export const invalidateDataManagementColumnsCache = () => {
+  cachedColumnsData = null;
+  cachedColumnsTime = 0;
+};
+
 export const getDataManagementColumns = async (req, res) => {
   try {
+    if (cachedColumnsData && Date.now() - cachedColumnsTime < COLUMNS_CACHE_TTL) {
+      return res.status(200).json(cachedColumnsData);
+    }
+
     await ensureDB();
 
     // Fetch distinct values for key filter dropdowns from actual database
@@ -166,10 +179,14 @@ export const getDataManagementColumns = async (req, res) => {
       });
     });
 
-    return res.status(200).json({
+    const payload = {
       success: true,
       columns: enrichedColumns
-    });
+    };
+    cachedColumnsData = payload;
+    cachedColumnsTime = Date.now();
+
+    return res.status(200).json(payload);
   } catch (error) {
     console.error("getDataManagementColumns error:", error);
     return res.status(500).json({
@@ -790,6 +807,7 @@ export const deleteDataManagementRecord = async (req, res) => {
       metadata: { recordId: id, pubApptId: record.PUB_APPT_ID }
     }).catch(() => {});
 
+    invalidateDataManagementColumnsCache();
     return res.status(200).json({ success: true, message: "Record deleted successfully" });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -810,6 +828,7 @@ export const bulkDeleteDataManagementRecords = async (req, res) => {
       { $set: { isDeleted: true } }
     );
 
+    invalidateDataManagementColumnsCache();
     return res.status(200).json({
       success: true,
       message: `Successfully deleted ${result.modifiedCount} records.`
@@ -847,7 +866,7 @@ export const exportDataManagementCSV = async (req, res) => {
       targetColumns = DATA_MANAGEMENT_COLUMNS.filter((c) => c.defaultVisible);
     }
 
-    const records = await DataManagementRecord.find(query).sort(sortObj).lean();
+    const records = await DataManagementRecord.find(query).sort(sortObj).limit(10000).lean();
 
     // Prepare CSV Header
     const escapeCsv = (val) => {
@@ -855,6 +874,10 @@ export const exportDataManagementCSV = async (req, res) => {
       let str = String(val);
       if (val instanceof Date) str = val.toLocaleDateString("en-IN");
       if (typeof val === "boolean") str = val ? "Yes" : "No";
+      // Spreadsheet formula injection mitigation
+      if (/^[=+\-@\t\r]/.test(str)) {
+        str = `'${str}`;
+      }
       return `"${str.replace(/"/g, '""')}"`;
     };
 

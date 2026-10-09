@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { connectDB, DEFAULT_MONGO_URI, isDatabaseReady } from "./config/db.js";
+import { connectDB, isDatabaseReady } from "./config/db.js";
 import { ensureFixedAdminUser } from "./config/seedAdmin.js";
 
 function loadEnvFallback() {
@@ -28,12 +28,6 @@ function loadEnvFallback() {
   }
 }
 loadEnvFallback();
-if (!process.env.JWT_SECRET) {
-  process.env.JWT_SECRET = "mySuperSecretKey123";
-}
-if (!process.env.MONGO_URI) {
-  process.env.MONGO_URI = DEFAULT_MONGO_URI;
-}
 
 let adminSeeded = false;
 
@@ -74,20 +68,24 @@ export async function runHandler(request, params = {}, middlewares = [], control
         if (value && typeof value === "object" && typeof value.arrayBuffer === "function") {
           const fileObj = value;
           if (fileObj.size > 0 && fileObj.name) {
-            const buffer = Buffer.from(await fileObj.arrayBuffer());
-            const safeName = fileObj.name.replace(/\s+/g, "_");
-            const filename = `${Date.now()}-${safeName}`;
-            const targetPath = path.join(uploadDir, filename);
-            fs.writeFileSync(targetPath, buffer);
-            // Also write to server/uploads if it exists for backwards compatibility
-            const serverUploadDir = path.resolve(process.cwd(), "server/uploads");
-            if (fs.existsSync(serverUploadDir)) {
-              try { fs.writeFileSync(path.join(serverUploadDir, filename), buffer); } catch (_) {}
+            const rawBaseName = path.basename(fileObj.name);
+            const safeName = rawBaseName.replace(/[^a-zA-Z0-9._-]/g, "_");
+            const ext = path.extname(safeName).toLowerCase();
+            const allowedExts = [".jpg", ".jpeg", ".png", ".webp", ".pdf"];
+            if (!allowedExts.includes(ext)) {
+              continue; // Reject unapproved file types
             }
+            const filename = `${Date.now()}-${safeName}`;
+            const targetPath = path.resolve(uploadDir, filename);
+            if (!targetPath.startsWith(uploadDir)) {
+              continue; // Prevent directory traversal
+            }
+            const buffer = Buffer.from(await fileObj.arrayBuffer());
+            fs.writeFileSync(targetPath, buffer);
             file = {
               filename,
               path: targetPath,
-              originalname: fileObj.name,
+              originalname: rawBaseName,
               mimetype: fileObj.type || "application/octet-stream",
               size: fileObj.size
             };

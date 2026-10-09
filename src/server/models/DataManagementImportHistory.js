@@ -30,6 +30,7 @@ const dataManagementImportHistorySchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    suppressReservedKeysWarning: true,
     collection: "data_management_import_histories"
   }
 );

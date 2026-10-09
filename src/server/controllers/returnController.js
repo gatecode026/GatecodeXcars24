@@ -3,6 +3,7 @@ import { ReturnRequest } from "../models/ReturnRequest.js";
 import { recordActivity } from "./activityController.js";
 import { invalidateDashboardCache } from "./dashboardController.js";
 import { createMicroCache } from "../cache/serverCache.js";
+import { paginateQuery } from "../utils/pagination.js";
 
 const returnTableCache = createMicroCache("returns", 8000);
 
@@ -61,14 +62,17 @@ export const getReturnRequests = async (req, res, next) => {
   try {
     const dbReady = await ensureDB();
     if (!dbReady) {
-      return res.status(200).json({ data: [] });
+      return res.status(200).json({
+        data: [],
+        pagination: { page: 1, perPage: 50, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false }
+      });
     }
 
     const userId = req.user?._id || req.user?.id || "anon";
     const cacheKey = `${String(userId)}_${JSON.stringify(req.query || {})}`;
     const cached = returnTableCache.get(cacheKey);
     if (cached) {
-      return res.status(200).json({ data: cached });
+      return res.status(200).json(cached);
     }
 
     const filter = {};
@@ -76,10 +80,27 @@ export const getReturnRequests = async (req, res, next) => {
       filter.employeeId = req.user._id;
     }
 
-    const requests = await ReturnRequest.find(filter).sort({ createdAt: -1 }).lean();
-    returnTableCache.set(cacheKey, requests);
+    if (req.query.returnStatus) {
+      filter.returnStatus = req.query.returnStatus;
+    }
+    if (req.query.search) {
+      const sanitized = String(req.query.search).trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      filter.$or = [
+        { customerName: { $regex: sanitized, $options: "i" } },
+        { mobileNumber: { $regex: sanitized, $options: "i" } },
+        { productType: { $regex: sanitized, $options: "i" } }
+      ];
+    }
 
-    return res.status(200).json({ data: requests });
+    const result = await paginateQuery(ReturnRequest, filter, {
+      page: req.query.page,
+      limit: req.query.limit || req.query.perPage,
+      all: req.query.all,
+      sort: { createdAt: -1 }
+    });
+
+    returnTableCache.set(cacheKey, result);
+    return res.status(200).json(result);
   } catch (error) {
     return next(error);
   }

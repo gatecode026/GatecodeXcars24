@@ -5,7 +5,7 @@ export const fetchCache = "force-no-store";
 import { runHandler } from "@/src/server/routeRunner";
 
 // Middlewares
-import { protect, adminOnly } from "@/src/server/middleware/authMiddleware";
+import { protect, adminOnly, teamLeaderOrAdmin } from "@/src/server/middleware/authMiddleware";
 import { validateRequest } from "@/src/server/middleware/validateMiddleware";
 
 // Validators
@@ -179,7 +179,7 @@ async function dispatch(request, context) {
     return runHandler(request, {}, [protect], bulkImportOrders);
   }
   if (path === "/orders") {
-    if (method === "GET") return runHandler(request, {}, [protect, adminOnly], getOrders);
+    if (method === "GET") return runHandler(request, {}, [protect, teamLeaderOrAdmin], getOrders);
     if (method === "POST") return runHandler(request, {}, [protect, createOrderValidator, validateRequest], createOrder);
   }
   if (slug[0] === "orders" && slug[1]) {
@@ -187,18 +187,18 @@ async function dispatch(request, context) {
     const sub = slug[2];
     const params = { id };
     if (!sub) {
-      if (method === "PUT") return runHandler(request, params, [protect, adminOnly], updateOrder);
+      if (method === "PUT") return runHandler(request, params, [protect, teamLeaderOrAdmin], updateOrder);
       if (method === "DELETE") return runHandler(request, params, [protect, adminOnly], deleteOrder);
     } else if (sub === "status" && method === "PATCH") {
-      return runHandler(request, params, [protect, adminOnly, updateOrderStatusValidator, validateRequest], updateOrderStatus);
+      return runHandler(request, params, [protect, teamLeaderOrAdmin, updateOrderStatusValidator, validateRequest], updateOrderStatus);
     } else if (sub === "parcel-status" && method === "PATCH") {
-      return runHandler(request, params, [protect, adminOnly, updateParcelStatusValidator, validateRequest], updateParcelStatus);
+      return runHandler(request, params, [protect, teamLeaderOrAdmin, updateParcelStatusValidator, validateRequest], updateParcelStatus);
     }
   }
 
   // 3. /api/returns
   if (path === "/returns") {
-    if (method === "GET") return runHandler(request, {}, [protect, adminOnly], getReturnRequests);
+    if (method === "GET") return runHandler(request, {}, [protect, teamLeaderOrAdmin], getReturnRequests);
     if (method === "POST") return runHandler(request, {}, [protect, createReturnRequestValidator, validateRequest], createReturnRequest);
   }
   if (slug[0] === "returns" && slug[1]) {
@@ -206,16 +206,16 @@ async function dispatch(request, context) {
     const sub = slug[2];
     const params = { id };
     if (!sub) {
-      if (method === "PUT") return runHandler(request, params, [protect, adminOnly], updateReturn);
+      if (method === "PUT") return runHandler(request, params, [protect, teamLeaderOrAdmin], updateReturn);
       if (method === "DELETE") return runHandler(request, params, [protect, adminOnly], deleteReturn);
     } else if (sub === "status" && method === "PATCH") {
-      return runHandler(request, params, [protect, adminOnly, updateReturnStatusValidator, validateRequest], updateReturnStatus);
+      return runHandler(request, params, [protect, teamLeaderOrAdmin, updateReturnStatusValidator, validateRequest], updateReturnStatus);
     }
   }
 
   // 4. /api/dashboard
   if (path === "/dashboard/summary" && method === "GET") {
-    return runHandler(request, {}, [protect, adminOnly], getDashboardSummary);
+    return runHandler(request, {}, [protect, teamLeaderOrAdmin], getDashboardSummary);
   }
 
   // 5. /api/employee
@@ -259,45 +259,45 @@ async function dispatch(request, context) {
 
   // 6. /api/admin
   if (path === "/admin/revenue-summary" && method === "GET") {
-    return runHandler(request, {}, [protect, adminOnly], getRevenueSummary);
+    return runHandler(request, {}, [protect, teamLeaderOrAdmin], getRevenueSummary);
   }
   if (path === "/admin/sales-summary" && method === "GET") {
-    return runHandler(request, {}, [protect, adminOnly], getSalesSummary);
+    return runHandler(request, {}, [protect, teamLeaderOrAdmin], getSalesSummary);
   }
   if (path === "/admin/employee-performance" && method === "GET") {
-    return runHandler(request, {}, [protect, adminOnly], getEmployeePerformance);
+    return runHandler(request, {}, [protect, teamLeaderOrAdmin], getEmployeePerformance);
   }
   if (path === "/admin/employee-history" && method === "GET") {
-    return runHandler(request, {}, [protect, adminOnly], getEmployeeHistory);
+    return runHandler(request, {}, [protect, teamLeaderOrAdmin], getEmployeeHistory);
   }
   if (path === "/admin/employee-summary" && method === "GET") {
-    return runHandler(request, {}, [protect, adminOnly], getEmployeeSummary);
+    return runHandler(request, {}, [protect, teamLeaderOrAdmin], getEmployeeSummary);
   }
   if (slug[0] === "admin" && slug[1] === "employee-details" && slug[2] && method === "GET") {
-    return runHandler(request, { id: slug[2] }, [protect, adminOnly], getEmployeeDetails);
+    return runHandler(request, { id: slug[2] }, [protect, teamLeaderOrAdmin], getEmployeeDetails);
   }
   // Performance & Incentives
   if (path === "/admin/performance-settings") {
-    if (method === "GET") return runHandler(request, {}, [protect, adminOnly], getPerformanceSettings);
+    if (method === "GET") return runHandler(request, {}, [protect, teamLeaderOrAdmin], getPerformanceSettings);
     if (method === "PUT") return runHandler(request, {}, [protect, adminOnly], updatePerformanceSettings);
   }
   if (path === "/admin/performance-ranking" && method === "GET") {
-    return runHandler(request, {}, [protect, adminOnly], getAdminPerformanceRanking);
+    return runHandler(request, {}, [protect, teamLeaderOrAdmin], getAdminPerformanceRanking);
   }
   if (path === "/admin/bonus-report" && method === "GET") {
-    return runHandler(request, {}, [protect, adminOnly], getAdminBonusReport);
+    return runHandler(request, {}, [protect, teamLeaderOrAdmin], getAdminBonusReport);
   }
   if (path === "/admin/bonus-report/export" && method === "GET") {
-    return runHandler(request, {}, [protect, adminOnly], exportBonusReportCSV);
+    return runHandler(request, {}, [protect, teamLeaderOrAdmin], exportBonusReportCSV);
   }
   if (slug[0] === "admin" && slug[1] === "performance-employee-detail" && slug[2] && method === "GET") {
-    return runHandler(request, { id: slug[2] }, [protect, adminOnly], getAdminEmployeePerformanceDetail);
+    return runHandler(request, { id: slug[2] }, [protect, teamLeaderOrAdmin], getAdminEmployeePerformanceDetail);
   }
 
   // 7. /api/employee-records
   if (path === "/employee-records") {
-    if (method === "GET") return runHandler(request, {}, [protect, adminOnly], getEmployeeRecords);
-    if (method === "POST") return runHandler(request, {}, [protect, adminOnly], createEmployeeRecord);
+    if (method === "GET") return runHandler(request, {}, [protect, teamLeaderOrAdmin], getEmployeeRecords);
+    if (method === "POST") return runHandler(request, {}, [protect, teamLeaderOrAdmin], createEmployeeRecord);
   }
   if (slug[0] === "employee-records" && slug[1] && method === "DELETE") {
     return runHandler(request, { id: slug[1] }, [protect, adminOnly], deleteEmployeeRecord);
@@ -305,11 +305,11 @@ async function dispatch(request, context) {
 
   // 8. /api/calling-records
   if (path === "/calling-records/bulk-import" && method === "POST") {
-    return runHandler(request, {}, [protect, adminOnly], bulkImportCallingRecords);
+    return runHandler(request, {}, [protect, teamLeaderOrAdmin], bulkImportCallingRecords);
   }
   if (path === "/calling-records") {
-    if (method === "GET") return runHandler(request, {}, [protect, adminOnly], getCallingRecords);
-    if (method === "POST") return runHandler(request, {}, [protect, adminOnly], createCallingRecord);
+    if (method === "GET") return runHandler(request, {}, [protect, teamLeaderOrAdmin], getCallingRecords);
+    if (method === "POST") return runHandler(request, {}, [protect, teamLeaderOrAdmin], createCallingRecord);
   }
   if (slug[0] === "calling-records" && slug[1] && method === "DELETE") {
     return runHandler(request, { id: slug[1] }, [protect, adminOnly], deleteCallingRecord);
@@ -370,40 +370,40 @@ async function dispatch(request, context) {
 
   // 12. /api/data-management
   if (path === "/data-management" && method === "GET") {
-    return runHandler(request, {}, [protect, adminOnly], getDataManagementRecords);
+    return runHandler(request, {}, [protect, teamLeaderOrAdmin], getDataManagementRecords);
   }
   if (path === "/data-management/columns" && method === "GET") {
-    return runHandler(request, {}, [protect, adminOnly], getDataManagementColumns);
+    return runHandler(request, {}, [protect, teamLeaderOrAdmin], getDataManagementColumns);
   }
   if (path === "/data-management/validate-import" && method === "POST") {
-    return runHandler(request, {}, [protect, adminOnly], validateDataImport);
+    return runHandler(request, {}, [protect, teamLeaderOrAdmin], validateDataImport);
   }
   if (path === "/data-management/import" && method === "POST") {
-    return runHandler(request, {}, [protect, adminOnly], importDataManagementRecords);
+    return runHandler(request, {}, [protect, teamLeaderOrAdmin], importDataManagementRecords);
   }
   if (path === "/data-management/import-history" && method === "GET") {
-    return runHandler(request, {}, [protect, adminOnly], getDataManagementImportHistory);
+    return runHandler(request, {}, [protect, teamLeaderOrAdmin], getDataManagementImportHistory);
   }
   if (path === "/data-management/export/csv" && method === "POST") {
-    return runHandler(request, {}, [protect, adminOnly], exportDataManagementCSV);
+    return runHandler(request, {}, [protect, teamLeaderOrAdmin], exportDataManagementCSV);
   }
   if (path === "/data-management/export/pdf" && method === "POST") {
-    return runHandler(request, {}, [protect, adminOnly], exportDataManagementPDF);
+    return runHandler(request, {}, [protect, teamLeaderOrAdmin], exportDataManagementPDF);
   }
   if (path === "/data-management/views") {
-    if (method === "GET") return runHandler(request, {}, [protect, adminOnly], getSavedViews);
-    if (method === "POST") return runHandler(request, {}, [protect, adminOnly], createSavedView);
+    if (method === "GET") return runHandler(request, {}, [protect, teamLeaderOrAdmin], getSavedViews);
+    if (method === "POST") return runHandler(request, {}, [protect, teamLeaderOrAdmin], createSavedView);
   }
   if (slug[0] === "data-management" && slug[1] === "views" && slug[2] && method === "DELETE") {
-    return runHandler(request, { id: slug[2] }, [protect, adminOnly], deleteSavedView);
+    return runHandler(request, { id: slug[2] }, [protect, teamLeaderOrAdmin], deleteSavedView);
   }
   if (path === "/data-management/bulk-delete" && method === "POST") {
     return runHandler(request, {}, [protect, adminOnly], bulkDeleteDataManagementRecords);
   }
   if (slug[0] === "data-management" && slug[1] && slug.length === 2) {
     const params = { id: slug[1] };
-    if (method === "GET") return runHandler(request, params, [protect, adminOnly], getDataManagementRecordById);
-    if (method === "PUT") return runHandler(request, params, [protect, adminOnly], updateDataManagementRecord);
+    if (method === "GET") return runHandler(request, params, [protect, teamLeaderOrAdmin], getDataManagementRecordById);
+    if (method === "PUT") return runHandler(request, params, [protect, teamLeaderOrAdmin], updateDataManagementRecord);
     if (method === "DELETE") return runHandler(request, params, [protect, adminOnly], deleteDataManagementRecord);
   }
 

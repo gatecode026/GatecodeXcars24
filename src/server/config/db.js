@@ -12,8 +12,7 @@ try {
 import fs from "node:fs";
 import path from "node:path";
 
-export const DEFAULT_MONGO_URI =
-  "mongodb+srv://gatecode026:tBNyNzO68BNn3Zkn@cluster0.1meot8l.mongodb.net/gatecodecars24";
+export const DEFAULT_MONGO_URI = process.env.MONGO_URI || "";
 
 function loadEnvFallback() {
   if (process.env.MONGO_URI && process.env.JWT_SECRET) return;
@@ -40,11 +39,9 @@ function loadEnvFallback() {
   }
 }
 loadEnvFallback();
-if (!process.env.JWT_SECRET) {
-  process.env.JWT_SECRET = "mySuperSecretKey123";
-}
+
 if (!process.env.MONGO_URI) {
-  process.env.MONGO_URI = DEFAULT_MONGO_URI;
+  console.warn("[Database Warning] MONGO_URI environment variable is not defined. Please set it in .env.local");
 }
 
 let cached = global.mongoose;
@@ -86,6 +83,9 @@ export const connectDB = async (timeoutMs = 8000) => {
   cached.promise = null;
 
   const rawUri = process.env.MONGO_URI || DEFAULT_MONGO_URI;
+  if (!rawUri) {
+    throw new Error("CRITICAL: MONGO_URI environment variable is missing. Database connection aborted.");
+  }
   const mongoUri = sanitizeMongoUri(rawUri);
 
   cached.promise = Promise.race([

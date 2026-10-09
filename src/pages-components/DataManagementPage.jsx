@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import * as XLSX from "xlsx";
 import { api, onDataSync } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -475,6 +474,7 @@ export default function DataManagementPage() {
     reader.onload = async (evt) => {
       try {
         const data = new Uint8Array(evt.target.result);
+        const XLSX = await import("xlsx");
         const workbook = XLSX.read(data, { type: "array", cellDates: true });
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];

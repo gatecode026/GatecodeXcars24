@@ -48,6 +48,7 @@ const orderSchema = new mongoose.Schema(
 
 orderSchema.index({ createdAt: -1 });
 orderSchema.index({ employeeId: 1, createdAt: -1 });
+orderSchema.index({ employeeId: 1, orderStatus: 1, createdAt: -1 });
 orderSchema.index({ orderStatus: 1 });
 orderSchema.index({ parcelStatus: 1 });
 orderSchema.index({ mobileNumber: 1 });

@@ -7,6 +7,7 @@ import { sendTLWhatsAppNotification } from "../services/whatsappNotificationServ
 import { can } from "../services/authorizationService.js";
 import { invalidateDashboardCache } from "./dashboardController.js";
 import { createMicroCache } from "../cache/serverCache.js";
+import { paginateQuery } from "../utils/pagination.js";
 
 const customerTableCache = createMicroCache("customers", 8000);
 
@@ -114,11 +115,13 @@ const buildCustomerFilter = (req) => {
     conditions.push({ verificationStatus: req.query.verificationStatus });
   }
 
+const escapeRegex = (str) => String(str || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
   // --- Lead By (executive) filter ---
   if (req.query.leadBy) {
     const name = String(req.query.leadBy).trim();
     if (name) {
-      conditions.push({ leadBy: new RegExp(name, "i") });
+      conditions.push({ leadBy: new RegExp(escapeRegex(name), "i") });
     }
   }
 
@@ -126,7 +129,7 @@ const buildCustomerFilter = (req) => {
   if (req.query.search) {
     const q = String(req.query.search).trim();
     if (q) {
-      const regex = new RegExp(q, "i");
+      const regex = new RegExp(escapeRegex(q), "i");
       conditions.push({
         $or: [
           { customerName: regex },
@@ -177,7 +180,10 @@ export const getCustomers = async (req, res, next) => {
   try {
     const dbReady = await ensureDB();
     if (!dbReady) {
-      return res.status(200).json({ data: [] });
+      return res.status(200).json({
+        data: [],
+        pagination: { page: 1, perPage: 50, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false }
+      });
     }
 
     const userId = req.user?._id || req.user?.id || "anon";
@@ -186,24 +192,26 @@ export const getCustomers = async (req, res, next) => {
 
     const cached = customerTableCache.get(cacheKey);
     if (cached) {
-      return res.status(200).json({ data: cached });
+      return res.status(200).json(cached);
     }
 
     const filter = buildCustomerFilter(req);
-    const limit = Math.min(parseInt(req.query.limit) || 500, 1000);
-    const skip = parseInt(req.query.skip) || 0;
+    const page = req.query.page ? parseInt(req.query.page, 10) : 1;
+    const limit = req.query.limit || req.query.perPage || 500;
 
-    const customers = await Customer.find(filter)
-      .select("-__v")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    const result = await paginateQuery(Customer, filter, {
+      page,
+      limit,
+      maxLimit: 1000,
+      all: req.query.all,
+      select: "-__v",
+      sort: { createdAt: -1 }
+    });
 
-    const normalized = customers.map(normalizeCustomer);
-    customerTableCache.set(cacheKey, normalized);
+    result.data = result.data.map(normalizeCustomer);
+    customerTableCache.set(cacheKey, result);
 
-    return res.status(200).json({ data: normalized });
+    return res.status(200).json(result);
   } catch (error) {
     return next(error);
   }
@@ -218,13 +226,14 @@ export const exportCustomersCSV = async (req, res, next) => {
   try {
     const dbReady = await ensureDB();
     if (!dbReady) {
-      
+      return res.status(503).json({ success: false, message: "Database unavailable." });
     }
 
     const filter = buildCustomerFilter(req);
     const customers = await Customer.find(filter)
       .populate("assignedTo", "name email")
       .sort({ createdAt: -1 })
+      .limit(10000)
       .lean();
 
     const normalized = customers.map(normalizeCustomer);
@@ -249,9 +258,12 @@ export const exportCustomersCSV = async (req, res, next) => {
       return date && time ? `${date} ${time}` : date || time || "";
     };
 
-    // --- CSV escape ---
+    // --- CSV escape (mitigate spreadsheet formula injection) ---
     const esc = (val) => {
-      const s = String(val ?? "").trim();
+      let s = String(val ?? "").trim();
+      if (/^[=+\-@\t\r]/.test(s)) {
+        s = `'${s}`;
+      }
       if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
         return `"${s.replace(/"/g, '""')}"`;
       }
@@ -675,7 +687,7 @@ export const bulkImportCustomers = async (req, res, next) => {
     const currentUserId = req.user?._id || req.user?.id;
     const currentUserName = req.user?.name || "Employee";
 
-    let insertedCount = 0;
+    const docsToInsert = [];
     const errors = [];
 
     for (let i = 0; i < rows.length; i++) {
@@ -712,7 +724,10 @@ export const bulkImportCustomers = async (req, res, next) => {
         const leadBy = getVal(r, "Lead By", "leadBy") || currentUserName;
         const followUpBy = getVal(r, "Follow Up Done By", "followUpBy", "Follow Up By") || "";
         const carNumber = getVal(r, "Car Number", "carNumber", "Car No").toUpperCase();
-        const appointmentId = getVal(r, "Appointment ID", "appointmentId");
+        let appointmentId = getVal(r, "Appointment ID", "appointmentId");
+        if (appointmentId) {
+          appointmentId = `AP-${appointmentId.replace(/^AP-?/, "").toUpperCase()}`;
+        }
         const remark = getVal(r, "Cx Expectation / Remarks", "remark", "Remarks", "Remark", "Notes");
         const email = getVal(r, "Email", "email");
         const rawVerification = getVal(r, "VERIFIED", "verificationStatus", "Verification Status", "Status");
@@ -733,30 +748,59 @@ export const bulkImportCustomers = async (req, res, next) => {
           }
         }
 
-        await Customer.create({
-          employeeId: currentUserId,
-          employeeName: currentUserName,
-          customerName: customerName || "Customer",
-          mobile: mobile || "-",
-          email,
-          remark,
-          appointmentId: appointmentId || undefined,
-          leadDate,
-          appointmentDate,
-          carNumber,
-          leadBy,
-          followUpBy,
-          followUpDate,
-          verified,
-          verificationStatus,
-          odometerKm: cleanOdo,
-          saleAmount: cleanSale,
-          leadStatus: verificationStatus === "Verified" ? "Verified" : verificationStatus === "Follow-up" ? "Follow-up" : "Pending"
-        });
+        const formattedName = customerName
+          ? String(customerName).trim().toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase())
+          : "Customer";
 
-        insertedCount++;
+        docsToInsert.push({
+          rowIndex: i + 1,
+          doc: {
+            employeeId: currentUserId,
+            employeeName: currentUserName,
+            customerName: formattedName,
+            mobile: mobile || "-",
+            email,
+            remark,
+            appointmentId: appointmentId || undefined,
+            leadDate,
+            appointmentDate,
+            carNumber,
+            leadBy,
+            followUpBy,
+            followUpDate,
+            verified,
+            verificationStatus,
+            odometerKm: cleanOdo,
+            saleAmount: cleanSale,
+            leadStatus: verificationStatus === "Verified" ? "Verified" : verificationStatus === "Follow-up" ? "Follow-up" : "Pending"
+          }
+        });
       } catch (rowErr) {
         errors.push({ row: i + 1, error: rowErr.message });
+      }
+    }
+
+    // Bounded chunked insertion (250 docs per chunk)
+    let insertedCount = 0;
+    const CHUNK_SIZE = 250;
+    for (let i = 0; i < docsToInsert.length; i += CHUNK_SIZE) {
+      const chunkItems = docsToInsert.slice(i, i + CHUNK_SIZE);
+      const chunkDocs = chunkItems.map((item) => item.doc);
+      try {
+        const inserted = await Customer.insertMany(chunkDocs, { ordered: false });
+        insertedCount += inserted.length;
+      } catch (batchErr) {
+        if (batchErr.insertedDocs) {
+          insertedCount += batchErr.insertedDocs.length;
+        }
+        if (batchErr.writeErrors) {
+          batchErr.writeErrors.forEach((we) => {
+            const originalRow = chunkItems[we.index]?.rowIndex || (i + we.index + 1);
+            errors.push({ row: originalRow, error: we.errmsg || we.message });
+          });
+        } else {
+          errors.push({ batch: Math.floor(i / CHUNK_SIZE) + 1, error: batchErr.message });
+        }
       }
     }
 
@@ -789,7 +833,7 @@ export const getEmployeesList = async (req, res, next) => {
 
     const dbReady = await ensureDB();
     if (!dbReady) {
-      
+      return res.status(503).json({ success: false, message: "Database unavailable." });
     }
     const users = await User.find(
       { isDeleted: { $ne: true }, role: { $in: ["employee", "tl"] } },

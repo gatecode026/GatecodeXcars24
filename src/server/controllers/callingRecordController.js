@@ -3,6 +3,7 @@ import { CallingRecord } from "../models/CallingRecord.js";
 import { User } from "../models/User.js";
 import { invalidateDashboardCache } from "./dashboardController.js";
 import { createMicroCache } from "../cache/serverCache.js";
+import { paginateQuery } from "../utils/pagination.js";
 
 const callingTableCache = createMicroCache("calling", 8000);
 
@@ -10,14 +11,17 @@ export const getCallingRecords = async (req, res, next) => {
   try {
     const dbReady = await ensureDB();
     if (!dbReady) {
-      return res.status(200).json({ data: [] });
+      return res.status(200).json({
+        data: [],
+        pagination: { page: 1, perPage: 50, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false }
+      });
     }
 
     const userId = req.user?._id || req.user?.id || "anon";
     const cacheKey = `${String(userId)}_${JSON.stringify(req.query || {})}`;
     const cached = callingTableCache.get(cacheKey);
     if (cached) {
-      return res.status(200).json({ data: cached });
+      return res.status(200).json(cached);
     }
 
     const { startDate, endDate, employeeId } = req.query;
@@ -43,13 +47,16 @@ export const getCallingRecords = async (req, res, next) => {
       }
     }
 
-    const records = await CallingRecord.find(filter)
-      .populate("employeeId", "name email role")
-      .sort({ date: -1, createdAt: -1 })
-      .lean();
+    const result = await paginateQuery(CallingRecord, filter, {
+      page: req.query.page,
+      limit: req.query.limit || req.query.perPage,
+      all: req.query.all,
+      sort: { date: -1, createdAt: -1 },
+      populate: { path: "employeeId", select: "name email role" }
+    });
 
-    callingTableCache.set(cacheKey, records);
-    return res.status(200).json({ data: records });
+    callingTableCache.set(cacheKey, result);
+    return res.status(200).json(result);
   } catch (error) {
     return next(error);
   }
@@ -180,7 +187,7 @@ export const bulkImportCallingRecords = async (req, res, next) => {
       if (u.email) userMap.set(u.email.toLowerCase().trim(), u);
     });
 
-    let insertedCount = 0;
+    const docsToInsert = [];
     const errors = [];
 
     for (let i = 0; i < rows.length; i++) {
@@ -194,8 +201,9 @@ export const bulkImportCallingRecords = async (req, res, next) => {
         targetUser = req.user;
       }
 
-      try {
-        await CallingRecord.create({
+      docsToInsert.push({
+        rowIndex: i + 1,
+        doc: {
           employeeId: targetUser._id || targetUser.id,
           employeeName: targetUser.name || "Executive",
           date: recordDate,
@@ -210,10 +218,31 @@ export const bulkImportCallingRecords = async (req, res, next) => {
           conversionsDone: getNum(r, "Conversions Done", "Conversions", "Visit Booked", "conversionsDone"),
           revenueGenerated: getNum(r, "Revenue Generated", "Revenue", "revenueGenerated"),
           createdBy: req.user?._id || req.user?.id
-        });
-        insertedCount++;
-      } catch (err) {
-        errors.push({ row: i + 1, error: err.message });
+        }
+      });
+    }
+
+    // Bounded chunked insertion (250 docs per chunk)
+    let insertedCount = 0;
+    const CHUNK_SIZE = 250;
+    for (let i = 0; i < docsToInsert.length; i += CHUNK_SIZE) {
+      const chunkItems = docsToInsert.slice(i, i + CHUNK_SIZE);
+      const chunkDocs = chunkItems.map((item) => item.doc);
+      try {
+        const inserted = await CallingRecord.insertMany(chunkDocs, { ordered: false });
+        insertedCount += inserted.length;
+      } catch (batchErr) {
+        if (batchErr.insertedDocs) {
+          insertedCount += batchErr.insertedDocs.length;
+        }
+        if (batchErr.writeErrors) {
+          batchErr.writeErrors.forEach((we) => {
+            const originalRow = chunkItems[we.index]?.rowIndex || (i + we.index + 1);
+            errors.push({ row: originalRow, error: we.errmsg || we.message });
+          });
+        } else {
+          errors.push({ batch: Math.floor(i / CHUNK_SIZE) + 1, error: batchErr.message });
+        }
       }
     }
 
